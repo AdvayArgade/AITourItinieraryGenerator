@@ -1,13 +1,17 @@
+from datetime import timedelta
+import json
 import math
-
 import requests
 import streamlit as st
-import os
 from openai import OpenAI
 from geopy.geocoders import Nominatim
+import logging
+from dotenv import load_dotenv
+import os
 
+load_dotenv('key.env')
+API_KEY = os.getenv('OPENAI_API_KEY')
 
-API_KEY = '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'
 client = OpenAI(api_key=API_KEY)
 
 function_descriptions = [
@@ -22,7 +26,7 @@ function_descriptions = [
                   "items": {
                       "type": "string"
                   },
-                  "description": "The ordered list of IATA codes of cities in the tour. e.g. ['BOM', 'PNQ']"
+                  "description": "The ordered list of names of cities in the tour. e.g. ['Mumbai', 'Paris']"
               },
 
                 "date_list": {
@@ -39,78 +43,124 @@ function_descriptions = [
     }
 ]
 
-def get_hotels(city, checkin_date, checkout_date, num_adults, num_children, city_dict):
-    # Initialize Nominatim API
-    st.write(city_dict)
+# Set the logging level (DEBUG for most details)
+logging.basicConfig(level=logging.DEBUG)
+
+# Create a logger for your specific API usage
+logger = logging.getLogger('booking_com_api')
+
+def make_booking_com_api_call(url, headers, data):
+  logger.debug("API Request:")
+  logger.debug(f"URL: {url}")
+  logger.debug(f"Headers: {headers}")
+  logger.debug(f"Body: {data}")
+
+  # Make your API call using requests library
+  response = requests.get(url, headers=headers, json=data)
+
+  logger.debug("API Response:")
+  logger.debug(f"Status Code: {response.status_code}")
+  logger.debug(f"Headers: {response.headers}")
+  logger.debug(f"Response Body: {response.json()}")
+
+  return response
+
+def get_hotel_data(city, checkin_date, checkout_date, num_adults, num_children):
+    city_dict = {}
+
+    # Geocode city to get latitude and longitude
     geolocator = Nominatim(user_agent="MyApp")
-
     location = geolocator.geocode(city)
-    lat = location.latitude
-    long = location.longitude
-    print("The latitude of the location is: ", location.latitude)
-    print("The longitude of the location is: ", location.longitude)
+    if location:
+        lat = location.latitude
+        long = location.longitude
 
-    url = "https://booking-com.p.rapidapi.com/v1/hotels/search-by-coordinates"
+        # Define URL and query parameters for Booking.com API
+        url = "https://booking-com.p.rapidapi.com/v1/hotels/search-by-coordinates"
+        num_rooms = math.ceil((num_adults + num_children) / 3)
+        querystring = {
+            "locale": "en-gb",
+            "room_number": num_rooms,
+            "checkin_date": checkin_date,
+            "checkout_date": checkout_date,
+            "filter_by_currency": "INR",
+            "longitude": long,
+            "latitude": lat,
+            "adults_number": num_adults,
+            "order_by": "popularity",
+            "units": "metric",
+            "page_number": "0",
+            "children_number": num_children,
+            "children_ages": "5,5,5,5,5",
+            "include_adjacency": "true",
+            "categories_filter_ids": "class::2,class::4,free_cancellation::1"
+        }
 
-    num_rooms = math.ceil((num_adults + num_children) / 3)
-    querystring = {
-        "locale": "en-gb",
-        "room_number": num_rooms,
-        "checkin_date": checkin_date,
-        "checkout_date": checkout_date,
-        "filter_by_currency": "INR",
-        "longitude": long,
-        "latitude": lat,
-        "adults_number": num_adults,
-        "order_by": "popularity",
-        "units": "metric",
-        "page_number": "0",
-        "children_number": num_children,
-        "children_ages": "5,5,5,5,5",
-        "include_adjacency": "true",
-        "categories_filter_ids": "class::2,class::4,free_cancellation::1"
-    }
+        headers = {
+            "X-RapidAPI-Key": "8d111f0846msha3a0a23cb3dce84p149309jsndff256e053ad",
+            "X-RapidAPI-Host": "booking-com.p.rapidapi.com"
+        }
 
-    headers = {
-        "X-RapidAPI-Key": "8d111f0846msha3a0a23cb3dce84p149309jsndff256e053ad",
-        "X-RapidAPI-Host": "booking-com.p.rapidapi.com"
-    }
-
-    response = requests.get(url, headers=headers, params=querystring)
-    st.write(response.status_code)
-    if response.status_code == 200:
-        data = response.json()
-        if "result" in data:
-            city_dict[city] = []
-            print("Hotel search results for Mumbai:")
-            for index, hotel in enumerate(data["result"], start=1):
-                hotel_dict = {}
-                hotel_dict['hotel_name'] = hotel.get("hotel_name", "N/A")
-                price = hotel.get("min_total_price", "N/A")
-                if isinstance(price, int):
-                    hotel_dict['price'] = str(price)
-                hotel_dict['address'] = hotel.get("address", "N/A")
-                hotel_dict['rating'] = hotel.get("review_score", "N/A")
-                # print(f"{index}. {hotel_name} - Address: {address}, Price for one day: {price} AED, Rating: {rating}")
-                st.write(hotel_dict)
-                city_dict[city].append(hotel_dict)
+        # Send request to Booking.com API
+        response = requests.get(url, headers=headers, params=querystring)
+        if response.status_code == 200:
+            data = response.json()
+            if "result" in data:
+                city_dict[city] = []
+                st.write("Hotel search results for", city, ":")
+                for index, hotel in enumerate(data["result"], start=1):
+                    hotel_dict = {}
+                    hotel_dict['hotel_name'] = hotel.get("hotel_name", "N/A")
+                    price = hotel.get("min_total_price", "N/A")
+                    if price is not None:
+                        hotel_dict['price'] = str(price)
+                    else:
+                        hotel_dict['price'] = "N/A"
+                    hotel_dict['address'] = hotel.get("address", "N/A")
+                    hotel_dict['rating'] = hotel.get("review_score", "N/A")
+                    st.write(f"{index}. {hotel_dict['hotel_name']} - Address: {hotel_dict['address']}, Price for one day: {hotel_dict['price']} AED, Rating: {hotel_dict['rating']}")
+                    city_dict[city].append(hotel_dict)
+            else:
+                st.write(f"No hotel results found for {city}.")
         else:
-            print("No hotel results found.")
+            st.write(f"Failed to retrieve hotel search results for {city}.")
     else:
-        print("Failed to retrieve hotel search results.")
+        st.write(f"Invalid city name: {city}")
+
+    return city_dict
 
 
 def generate_itinerary(input_dict):
     # Part 1: generate the list of cities and get the hotels
     # Call the OpenAI API for creating the list of cities and dates
-    city_dict = {}
-    cities = ['Pune', 'Mumbai', 'Hyderabad']
-    dates = ['2024-04-01', '2024-04-03', '2024-04-05', '2024-04-07']
+    input_dict['end_date'] = str(input_dict['start_date'] + timedelta(days=input_dict['num_days']))
+    user_prompt = f"Generate a list of cities for a tour of {input_dict['dest']} for {input_dict['num_tourists']} " \
+                  f"people with {input_dict['num_adults']} adults, purpose as {input_dict['genre']} " \
+                  f"for {input_dict['num_days']} days and a budget per person of {input_dict['price_per_person']} INR starting on " \
+                  f"{input_dict['start_date']}, ending on {input_dict['end_date']}. Call the function 'get_flight_hotel_info'"
+
+    completion = client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[{"role": "user", "content": user_prompt}],
+        # Add function calling
+        functions=function_descriptions,
+        function_call="auto",  # specify the function call
+        max_tokens=200
+    )
+    output = completion.choices[0].message
+    cities = json.loads(output.function_call.arguments).get("loc_list")
+    dates = json.loads(output.function_call.arguments).get("date_list")
+    dates.append(input_dict['end_date'])
+
+    all_city_dict = {}
+    # cities = ['Pune', 'Mumbai', 'Hyderabad']
+    # dates = ['2024-05-19', '2024-05-21', '2024-05-23', '2024-05-25']
     for i in range(len(cities)):
-        get_hotels(cities[i], dates[i], dates[i+1], input_dict['num_adults'], input_dict['num_children'], city_dict)
+        st.write(cities[i], dates[i], dates[i+1], input_dict['num_adults'], input_dict['num_children'])
+        all_city_dict.update(get_hotel_data(cities[i], dates[i], dates[i+1], input_dict['num_adults'], input_dict['num_children']))
 
     # Part 2: Actually generate the itinerary
-    user_message = f"Design a detailed itinerary for a trip from {input_dict['src']} to {input_dict['dest']} starting from {input_dict['start_date']} and for " \
+    user_message = f"Include the same cities and dates from your previous response. Design a detailed itinerary for a trip from {input_dict['src']} to {input_dict['dest']} starting from {input_dict['start_date']} and for " \
                    f"{input_dict['num_days']} days. The budget for this trip is {input_dict['price_per_person']} INR per person. This trip is designed " \
                    f"for {input_dict['num_tourists']} mainly with their {input_dict['type_of_travelers']} with an average age of {input_dict['average_age']}.The " \
                    f"primary interests for activities are {input_dict['genre']}.The preferred mode(s) of travel include " \
@@ -124,25 +174,29 @@ def generate_itinerary(input_dict):
                    f"appealing. Keep the response descriptive and appealing"
 
     # Generate the travel itinerary using the modified user message
-    # chat_completion = client.chat.completions.create(
-    #     messages=[
-    #         {
-    #             "role": "user",
-    #             "content": user_message,
-    #         }
-    #     ],
-    #     model="gpt-3.5-turbo",
-    #     stream=True,
-    # )
-    #
-    # # response_content = chat_completion.choices[0].message.content
-    # response = st.write_stream(chat_completion)
-    response = "Dummy response"
-    return response, city_dict
+    chat_completion = client.chat.completions.create(
+        messages=[
+            {
+                "role": "user",
+                "content": user_message,
+            }
+        ],
+        model="gpt-3.5-turbo",
+        stream=True,
+    )
 
+    # response_content = chat_completion.choices[0].message.content
+    response = st.write_stream(chat_completion)
+    return response, all_city_dict
 
+st.cache(suppress_st_warning=True)(get_hotel_data)
+st.cache(suppress_st_warning=True)(generate_itinerary)
 past_itineraries = []  # List to store past itineraries
 input_dict = {}
+st.set_page_config(
+    page_title="AI Tour Itinerary Generator",  # Set your desired title here
+    page_icon="images/favicon.ico",  # Set path to your favicon image (.ico format)
+)
 st.title("Tour Itinerary Generator")
 
 col1, col2 = st.columns(2)
@@ -157,8 +211,8 @@ input_dict['start_date'] = col2.date_input("Start Date", key='start_date')
 # Create sub-columns within col2
 col21, col22 = col2.columns(2)
 
-input_dict['num_adults'] = col21.number_input("Number of Adults", key='num_adults')
-input_dict['num_children'] = col22.number_input("Number of Children", key='num_children')
+input_dict['num_adults'] = int(col21.number_input("Number of Adults", key='num_adults'))
+input_dict['num_children'] = int(col22.number_input("Number of Children", key='num_children'))
 input_dict['price_per_person'] = col2.number_input("Price Per Person", key='price_per_person')
 input_dict['average_age'] = col2.number_input("Average age", key='average_age')
 input_dict['food'] = 'non veg' if st.toggle('Include non-veg hotels') else 'veg'
@@ -173,8 +227,7 @@ if st.button("Generate Itinerary", type="primary"):
     else:
         generated_itinerary, city_dict = generate_itinerary(input_dict)
         past_itineraries.append(generated_itinerary)  # Add to past itineraries
-        print(city_dict.items())
-        st.write(city_dict)
+
 with st.expander("Past Itineraries"):
     if past_itineraries:
         for itinerary in past_itineraries:
