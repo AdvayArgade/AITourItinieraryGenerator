@@ -293,15 +293,15 @@ input_dict['src'] = col1.text_input("Source City", key='src')
 input_dict['genre'] = col1.text_input("Genre", key='genre')
 input_dict['type_of_travelers'] = col1.text_input("Type of Travelers", key='type', placeholder='ex. family, friends')
 input_dict['mode_of_travel'] = col1.text_input("Mode of Travel", key='mode', placeholder='ex. flight, bus, train')
-input_dict['num_days'] = col2.number_input("Number of Days", key='num_days')
+input_dict['num_days'] = col2.number_input("Number of Days", key='num_days', min_value=0, max_value=None, value=0, step=1, format="%d")
 input_dict['start_date'] = col2.date_input("Start Date", key='start_date')
 # Create sub-columns within col2
 col21, col22 = col2.columns(2)
 
-input_dict['num_adults'] = int(col21.number_input("Number of Adults", key='num_adults'))
-input_dict['num_children'] = int(col22.number_input("Number of Children", key='num_children'))
-input_dict['price_per_person'] = col2.number_input("Price Per Person", key='price_per_person')
-input_dict['average_age'] = col2.number_input("Average age", key='average_age')
+input_dict['num_adults'] = int(col21.number_input("Number of Adults", key='num_adults', min_value=0, max_value=None, value=0, step=1, format="%d"))
+input_dict['num_children'] = int(col22.number_input("Number of Children", key='num_children', min_value=0, max_value=None, value=0, step=1, format="%d"))
+input_dict['price_per_person'] = col2.number_input("Price Per Person", key='price_per_person', min_value=0.0)
+input_dict['average_age'] = col2.number_input("Average age", key='average_age', min_value=0, max_value=None, value=0, step=1, format="%d")
 input_dict['food'] = 'non veg' if st.toggle('Include non-veg hotels') else 'veg'
 
 input_dict['num_tourists'] = input_dict['num_adults'] + input_dict['num_children']
