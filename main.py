@@ -108,6 +108,9 @@ def get_hotel_data(city, checkin_date, checkout_date, num_adults, num_children):
 
         # Send request to Booking.com API
         response = requests.get(url, headers=headers, params=querystring)
+        if response.status_code != 200:
+                  st.write(f"Failed to retrieve hotel search results for {city}. Please try again later.")
+
         if response.status_code == 200:
             data = response.json()
             if "result" in data:
@@ -305,8 +308,16 @@ input_dict['average_age'] = col2.number_input("Average age", key='average_age', 
 input_dict['food'] = 'non veg' if st.toggle('Include non-veg hotels') else 'veg'
 
 input_dict['num_tourists'] = input_dict['num_adults'] + input_dict['num_children']
-
-if st.button("Generate Itinerary", type="primary"):
+# Error handling block for input fields
+if not input_dict['dest'] or not input_dict['src']:
+    st.warning("Please enter valid destination and source cities.")
+elif input_dict['num_days'] < 1:
+    st.warning("Number of days must be at least 1.")
+elif input_dict['start_date'] is None:
+    st.warning("Please select a valid start date.")
+elif input_dict['num_adults'] == 0:
+    st.warning("Please enter the number of adults.")
+elif st.button("Generate Itinerary", type="primary"):
     for key in input_dict.keys():
         if input_dict[key] is None:
             st.warning(f'Please enter {key}!')
