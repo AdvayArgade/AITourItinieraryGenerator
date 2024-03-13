@@ -3,6 +3,7 @@ import json
 import math
 import requests
 import streamlit as st
+from geopy.geocoders import Nominatim
 from openai import OpenAI
 import logging
 from dotenv import load_dotenv
@@ -12,11 +13,13 @@ from docx.shared import Pt
 from docx.shared import Inches
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 from io import BytesIO
-import geocoder
 
 
-load_dotenv('key.env')
+load_dotenv('keys.env')
 API_KEY = os.getenv('OPENAI_API_KEY')
+RAPID_API_KEY = os.getenv("X-RapidAPI-Key")
+RAPID_API_HOST = os.getenv("X-RapidAPI-Host")
+
 
 client = OpenAI(api_key=API_KEY)
 
@@ -75,10 +78,12 @@ def get_hotel_data(city, checkin_date, checkout_date, num_adults, num_children):
     city_dict = {}
 
     # Geocode city to get latitude and longitude
-    location = geocoder.osm(city)
+    geolocator = Nominatim(user_agent="MyApp")
+    location = geolocator.geocode(city)
+
     if location:
-        lat = location.lat
-        long = location.lng
+        lat = location.latitude
+        long = location.longitude
 
         # Define URL and query parameters for Booking.com API
         url = "https://booking-com.p.rapidapi.com/v1/hotels/search-by-coordinates"
@@ -95,22 +100,16 @@ def get_hotel_data(city, checkin_date, checkout_date, num_adults, num_children):
             "order_by": "popularity",
             "units": "metric",
             "page_number": "0",
-            "children_number": num_children,
-            "children_ages": "5,5,5,5,5",
-            "include_adjacency": "true",
-            "categories_filter_ids": "class::2,class::4,free_cancellation::1"
         }
-
+        if num_children>0:
+            querystring["children_number"] = num_children
         headers = {
-            "X-RapidAPI-Key": "8d111f0846msha3a0a23cb3dce84p149309jsndff256e053ad",
-            "X-RapidAPI-Host": "booking-com.p.rapidapi.com"
+            "X-RapidAPI-Key": RAPID_API_KEY,
+            "X-RapidAPI-Host": RAPID_API_HOST
         }
 
         # Send request to Booking.com API
         response = requests.get(url, headers=headers, params=querystring)
-        if response.status_code != 200:
-                  st.write(f"Failed to retrieve hotel search results for {city}. Please try again later.")
-
         if response.status_code == 200:
             data = response.json()
             if "result" in data:
@@ -213,7 +212,7 @@ def text_to_doc(itinerary, input_dict):
     document = Document()
     paragraph = document.add_paragraph()
     run = paragraph.add_run()
-    #run.add_picture("Logo.png", width=Inches(2.0))  # Adjust width as needed
+    run.add_picture("images/Logo.png", width=Inches(2.0))  # Adjust width as needed
 
     # Set paragraph alignment to center
     paragraph.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
@@ -308,16 +307,8 @@ input_dict['average_age'] = col2.number_input("Average age", key='average_age', 
 input_dict['food'] = 'non veg' if st.toggle('Include non-veg hotels') else 'veg'
 
 input_dict['num_tourists'] = input_dict['num_adults'] + input_dict['num_children']
-# Error handling block for input fields
-if not input_dict['dest'] or not input_dict['src']:
-    st.warning("Please enter valid destination and source cities.")
-elif input_dict['num_days'] < 1:
-    st.warning("Number of days must be at least 1.")
-elif input_dict['start_date'] is None:
-    st.warning("Please select a valid start date.")
-elif input_dict['num_adults'] == 0:
-    st.warning("Please enter the number of adults.")
-elif st.button("Generate Itinerary", type="primary"):
+
+if st.button("Generate Itinerary", type="primary"):
     for key in input_dict.keys():
         if input_dict[key] is None:
             st.warning(f'Please enter {key}!')
