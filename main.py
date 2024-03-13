@@ -212,17 +212,29 @@ def text_to_doc(itinerary, input_dict):
     document = Document()
     paragraph = document.add_paragraph()
     run = paragraph.add_run()
-    run.add_picture("images/Logo.png", width=Inches(2.0))  # Adjust width as needed
+    run.add_picture("logo.png", width=Inches(2.0))  # Adjust width as needed
+    paragraph.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+
+
+    # Split the itinerary into lines
+    lines = itinerary.split('\n')
+
+    # Add the first line as a centered and bold paragraph
+    first_line = lines[0]
+    paragraph = document.add_paragraph()
+    paragraph.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+    run = paragraph.add_run(first_line)
+    run.bold = True
+    run.font.size = Pt(16)  # Set the font size to 16 points for "very bold"
 
     # Set paragraph alignment to center
-    paragraph.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
-    first_line = itinerary.split('\n')[1]
+    # first_line = itinerary.split('\n')[1]
 
-    # Add the first line as a centered header
-    header = document.add_heading(level=1)
-    header_run = header.add_run(first_line)
-    header_run.font.size = Pt(16)  # Adjust font size if needed
-    header.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+    # # Add the first line as a centered header
+    # header = document.add_heading(level=1)
+    # header_run = header.add_run(first_line)
+    # header_run.font.size = Pt(16)  # Adjust font size if needed
+    # header.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
     paragraph1 = document.add_paragraph()
     run1 = paragraph1.add_run("Destination: ")
     run1.bold = True
@@ -242,7 +254,7 @@ def text_to_doc(itinerary, input_dict):
     run2.bold = True
     run2 = paragraph2.add_run(str(input_dict['start_date']))
 
-    for line in itinerary.split('\n')[2:]:
+    for line in itinerary.split('\n')[1:]:
         paragraph = document.add_paragraph()
         for char in line:
             if char == '*':
