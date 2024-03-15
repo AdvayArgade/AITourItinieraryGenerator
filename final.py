@@ -258,6 +258,9 @@ def generate_itinerary(input_dict):
     dates = json.loads(output.function_call.arguments).get("date_list")
     dates.append(input_dict['end_date'])
 
+    print(cities)
+    print(dates)
+
     input_dict['cities'] = cities
     input_dict['dates'] = dates
     all_city_dict = {}
@@ -265,7 +268,7 @@ def generate_itinerary(input_dict):
     printables = {}
     city_string = ''
     for city in cities:
-        city_string+=city + '  '
+        city_string+=city + ' - '
     st.subheader("Cities: ")
     st.write(city_string)
     printables['city_string'] = city_string
@@ -396,7 +399,6 @@ def extract_proper_nouns(text):
 
 
 @st.cache_data(show_spinner=False)
-
 def text_to_doc(itinerary, input_dict):
     document = Document()
     paragraph = document.add_paragraph()
@@ -473,6 +475,7 @@ def text_to_doc(itinerary, input_dict):
     return doc_io
 
 
+@st.cache_data(show_spinner=False)
 def display_image_choices(days):
     proper_nouns_by_day = {}
     for day in days:
@@ -490,8 +493,7 @@ def display_image_choices(days):
     return proper_nouns_by_day
 
 
-
-st.session_state['past_itineraries'] = []  # List to store past itineraries
+st.session_state['data_changed'] = False
 input_dict = {}
 st.set_page_config(
     page_title="AI Tour Itinerary Generator",  # Set your desired title here
@@ -519,6 +521,11 @@ input_dict['food'] = 'non veg' if st.toggle('Include non-veg hotels') else 'veg'
 
 input_dict['num_tourists'] = input_dict['num_adults'] + input_dict['num_children']
 
+if st.session_state.get('input_dict', False):
+    for key in input_dict.keys():
+        if input_dict[key] != st.session_state['input_dict'][key]:
+            st.session_state['data_changed'] = True
+            break
 
 if st.button("Generate Itinerary", type="primary"):
     null_flag = False
@@ -531,19 +538,14 @@ if st.button("Generate Itinerary", type="primary"):
     if not null_flag:
         generated_itinerary, city_dict, flight_info, days, city_string = generate_itinerary(input_dict)
         st.session_state["cached_data_generated"] = True
-        st.session_state['past_itineraries'].append(generated_itinerary)  # Add to past itineraries
+        st.session_state['data_changed'] = False
         isGenerated = True
 
-elif st.session_state.get("cached_data_generated", False):
+elif st.session_state.get("cached_data_generated", False) and not st.session_state['data_changed']:
     generated_itinerary, city_dict, flight_info, days, city_string = generate_itinerary(input_dict)
-    # st.subheader("Cities: ")
-    # st.write(city_string)
-    #
-    # st.subheader('Itinerary: ')
-    # st.write(generated_itinerary)
 
 
-if st.session_state.get("cached_data_generated", False):
+if st.session_state.get("cached_data_generated", False) and not st.session_state['data_changed']:
     st.subheader("Hotels")
     for city, hotels in city_dict.items():
         city_expander = st.expander(f"{city}")
@@ -568,12 +570,7 @@ if st.session_state.get("cached_data_generated", False):
                 # Add more details as needed (amenities, images, etc.)
                 st.write("---")
 
-    if not st.session_state.get("proper_nouns_by_day", False):
-        proper_nouns_by_day = display_image_choices(days)
-
-    else:
-        proper_nouns_by_day = st.session_state["proper_nouns_by_day"]
-
+    proper_nouns_by_day = display_image_choices(days)
     for day, proper_nouns in proper_nouns_by_day.items():
 
         if proper_nouns:
@@ -592,9 +589,4 @@ if st.session_state.get("cached_data_generated", False):
         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     )
 
-with st.expander("Past Itineraries"):
-    if st.session_state.get('past_itineraries', False):
-        for itinerary in st.session_state['past_itineraries:']:
-            st.write(itinerary)
-    else:
-        st.write("No past itineraries yet.")
+
