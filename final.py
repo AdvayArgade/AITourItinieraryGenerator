@@ -16,16 +16,19 @@ from io import BytesIO
 import nltk
 from nltk import pos_tag, ne_chunk
 from nltk.tokenize import word_tokenize
-from collections import Counter
 from amadeus import Client, ResponseError, Location
-from tabulate import tabulate
 
-load_dotenv('key.env')
+load_dotenv('keys.env')
 API_KEY = os.getenv('OPENAI_API_KEY')
 RAPID_API_KEY = os.getenv("X-RapidAPI-Key")
 RAPID_API_HOST = os.getenv("X-RapidAPI-Host")
 
 client = OpenAI(api_key=API_KEY)
+
+amadeus = Client(
+    client_id='HlpBStOyyZ79qlc8cD4dTJEnsjnBv59Z',
+    client_secret='VgElo0vAcc2QLiZ5'
+)
 
 function_descriptions = [
     {
@@ -35,20 +38,20 @@ function_descriptions = [
             "type": "object",
             "properties": {
                 "loc_list": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    },
-                    "description": "The ordered list of names of cities in the tour. e.g. ['Mumbai', 'Paris']"
-                },
+                  "type": "array",
+                  "items": {
+                      "type": "string"
+                  },
+                  "description": "The ordered list of names of cities in the tour. e.g. ['Mumbai', 'Paris']"
+              },
 
                 "date_list": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    },
-                    "description": "The ordered list of dates for arrival in the cities in YYYY-MM-DD format."
-                },
+                  "type": "array",
+                  "items": {
+                      "type": "string"
+                  },
+                  "description": "The ordered list of dates for arrival in the cities in YYYY-MM-DD format."
+              },
 
             },
             "required": ["loc_list", "date_list"],
@@ -62,10 +65,86 @@ logging.basicConfig(level=logging.DEBUG)
 # Create a logger for your specific API usage
 logger = logging.getLogger('booking_com_api')
 
-amadeus = Client(
-    client_id='HlpBStOyyZ79qlc8cD4dTJEnsjnBv59Z',
-    client_secret='VgElo0vAcc2QLiZ5'
-)
+
+
+def make_booking_com_api_call(url, headers, data):
+  logger.debug("API Request:")
+  logger.debug(f"URL: {url}")
+  logger.debug(f"Headers: {headers}")
+  logger.debug(f"Body: {data}")
+
+  # Make your API call using requests library
+  response = requests.get(url, headers=headers, json=data)
+
+  logger.debug("API Response:")
+  logger.debug(f"Status Code: {response.status_code}")
+  logger.debug(f"Headers: {response.headers}")
+  logger.debug(f"Response Body: {response.json()}")
+
+  return response
+
+def get_hotel_data(city, checkin_date, checkout_date, num_adults, num_children):
+    city_dict = {}
+
+    # Geocode city to get latitude and longitude
+    geolocator = Nominatim(user_agent="MyApp")
+    location = geolocator.geocode(city)
+
+    if location:
+        lat = location.latitude
+        long = location.longitude
+
+        # Define URL and query parameters for Booking.com API
+        url = "https://booking-com.p.rapidapi.com/v1/hotels/search-by-coordinates"
+        num_rooms = math.ceil((num_adults + num_children) / 3)
+        querystring = {
+            "locale": "en-gb",
+            "room_number": num_rooms,
+            "checkin_date": checkin_date,
+            "checkout_date": checkout_date,
+            "filter_by_currency": "INR",
+            "longitude": long,
+            "latitude": lat,
+            "adults_number": num_adults,
+            "order_by": "popularity",
+            "units": "metric",
+            "page_number": "0",
+        }
+        if num_children>0:
+            querystring["children_number"] = num_children
+        headers = {
+            "X-RapidAPI-Key": RAPID_API_KEY,
+            "X-RapidAPI-Host": RAPID_API_HOST
+        }
+
+        # Send request to Booking.com API
+        response = requests.get(url, headers=headers, params=querystring)
+        if response.status_code == 200:
+            data = response.json()
+            if "result" in data:
+                city_dict[city] = []
+                st.write(f"Finding hotels for {city}")
+                # st.write("Hotel search results for", city, ":")
+                for index, hotel in enumerate(data["result"], start=1):
+                    hotel_dict = {}
+                    hotel_dict['hotel_name'] = hotel.get("hotel_name", "N/A")
+                    price = hotel.get("min_total_price", "N/A")
+                    if price is not None:
+                        hotel_dict['price'] = str(price)
+                    else:
+                        hotel_dict['price'] = "N/A"
+                    hotel_dict['address'] = hotel.get("address", "N/A")
+                    hotel_dict['rating'] = hotel.get("review_score", "N/A")
+                    # st.write(f"{index}. {hotel_dict['hotel_name']} - Address: {hotel_dict['address']}, Price for one day: {hotel_dict['price']} INR, Rating: {hotel_dict['rating']}")
+                    city_dict[city].append(hotel_dict)
+            else:
+                st.write(f"No hotel results found for {city}.")
+        else:
+            st.write(f"Failed to retrieve hotel search results for {city}.")
+    else:
+        st.write(f"Invalid city name: {city}")
+
+    return city_dict
 
 
 def flight_search(input_dict):
@@ -128,225 +207,6 @@ def flight_search(input_dict):
     return flights
 
 
-def make_booking_com_api_call(url, headers, data):
-    logger.debug("API Request:")
-    logger.debug(f"URL: {url}")
-    logger.debug(f"Headers: {headers}")
-    logger.debug(f"Body: {data}")
-
-    # Make your API call using requests library
-    response = requests.get(url, headers=headers, json=data)
-
-    logger.debug("API Response:")
-    logger.debug(f"Status Code: {response.status_code}")
-    logger.debug(f"Headers: {response.headers}")
-    logger.debug(f"Response Body: {response.json()}")
-
-    return response
-
-
-def get_hotel_data(city, checkin_date, checkout_date, num_adults, num_children):
-    city_dict = {}
-
-    # Geocode city to get latitude and longitude
-    geolocator = Nominatim(user_agent="MyApp")
-    location = geolocator.geocode(city)
-
-    if location:
-        lat = location.latitude
-        long = location.longitude
-
-        # Define URL and query parameters for Booking.com API
-        url = "https://booking-com.p.rapidapi.com/v1/hotels/search-by-coordinates"
-        num_rooms = math.ceil((num_adults + num_children) / 3)
-        querystring = {
-            "locale": "en-gb",
-            "room_number": num_rooms,
-            "checkin_date": checkin_date,
-            "checkout_date": checkout_date,
-            "filter_by_currency": "INR",
-            "longitude": long,
-            "latitude": lat,
-            "adults_number": num_adults,
-            "order_by": "popularity",
-            "units": "metric",
-            "page_number": "0",
-        }
-        if num_children > 0:
-            querystring["children_number"] = num_children
-        headers = {
-            "X-RapidAPI-Key": RAPID_API_KEY,
-            "X-RapidAPI-Host": RAPID_API_HOST
-        }
-
-        # Send request to Booking.com API
-        response = requests.get(url, headers=headers, params=querystring)
-        if response.status_code == 200:
-            data = response.json()
-            if "result" in data:
-                city_dict[city] = []
-                st.write(f"Finding hotels for {city}")
-                # st.write("Hotel search results for", city, ":")
-                for index, hotel in enumerate(data["result"], start=1):
-                    hotel_dict = {}
-                    hotel_dict['hotel_name'] = hotel.get("hotel_name", "N/A")
-                    price = hotel.get("min_total_price", "N/A")
-                    if price is not None:
-                        hotel_dict['price'] = str(price)
-                    else:
-                        hotel_dict['price'] = "N/A"
-                    hotel_dict['address'] = hotel.get("address", "N/A")
-                    hotel_dict['rating'] = hotel.get("review_score", "N/A")
-                    # st.write(f"{index}. {hotel_dict['hotel_name']} - Address: {hotel_dict['address']}, Price for one day: {hotel_dict['price']} INR, Rating: {hotel_dict['rating']}")
-                    city_dict[city].append(hotel_dict)
-            else:
-                st.write(f"No hotel results found for {city}.")
-        else:
-            st.write(f"Failed to retrieve hotel search results for {city}.")
-            print(response.text)
-    else:
-        st.write(f"Invalid city name: {city}")
-
-    return city_dict
-
-
-def generate_itinerary(input_dict):
-    # Part 1: generate the list of cities and get the hotels
-    # Call the OpenAI API for creating the list of cities and dates
-    input_dict['end_date'] = str(input_dict['start_date'] + timedelta(days=input_dict['num_days']))
-    user_prompt = f"Generate a list of cities for a tour of {input_dict['dest']} for {input_dict['num_tourists']} " \
-                  f"people with {input_dict['num_adults']} adults, purpose as {input_dict['genre']} " \
-                  f"for {input_dict['num_days']} days and a budget per person of {input_dict['price_per_person']} INR starting on " \
-                  f"{input_dict['start_date']}, ending on {input_dict['end_date']}. Call the function 'get_flight_hotel_info'"
-
-    completion = client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[{"role": "user", "content": user_prompt}],
-        # Add function calling
-        functions=function_descriptions,
-        function_call="auto",  # specify the function call
-        max_tokens=200
-    )
-    output = completion.choices[0].message
-    cities = json.loads(output.function_call.arguments).get("loc_list")
-    dates = json.loads(output.function_call.arguments).get("date_list")
-    dates.append(input_dict['end_date'])
-
-    input_dict['dates'] = dates
-    input_dict['cities'] = cities
-    all_city_dict = {}
-
-    city_string = ''
-    for city in cities:
-        city_string += city + '  '
-    st.subheader("Cities: ")
-    st.write(city_string)
-
-    for i in range(len(cities)):
-        # st.write(cities[i], dates[i], dates[i+1], input_dict['num_adults'], input_dict['num_children'])
-        all_city_dict.update(
-            get_hotel_data(cities[i], dates[i], dates[i + 1], input_dict['num_adults'], input_dict['num_children']))
-    input_dict['hotels_by_city'] = all_city_dict
-
-    # Part 2: Actually generate the itinerary
-    user_message = f"Design a detailed itinerary for a trip from {input_dict['src']} to {input_dict['dest']} starting from {input_dict['start_date']} and for " \
-                   f"{input_dict['num_days']} days. The ordered list of cities is {cities} and of dates is {dates}. The budget for this trip is {input_dict['price_per_person']} INR per person. This trip is designed " \
-                   f"for {input_dict['num_tourists']} mainly with their {input_dict['type_of_travelers']} with an average age of {input_dict['average_age']}.The " \
-                   f"primary interests for activities are {input_dict['genre']}.The preferred mode(s) of travel include " \
-                   f"{input_dict['mode_of_travel']}.The group prefers {input_dict['food']} food.Also consider this note {special_note}. Please structure the itinerary with a detailed " \
-                   f"plan for each day, including activities, locations, weather according to the season they are " \
-                   f"travelling and estimated travel distances and times. Write the travel time and distance in the day's subheading. " \
-                   f"Ensure to consider the preferences and " \
-                   f"interests of the group for each day's schedule. Important considerations: Factor in travel time " \
-                   f"between destinations. Suggest local transportation options. Include a mix of activities that cater" \
-                   f" to the group's interests. Also add distance of travel for each day and approx time " \
-                   f"of travel. Also you can give a name for each day in the itinerary which will be more " \
-                   f"appealing. Keep the response descriptive and it should be appealing to the user . Give a title to the itinerary. " \
-                   f"in the first city."
-
-    # Generate the travel itinerary using the modified user message
-    chat_completion = client.chat.completions.create(
-        messages=[
-            {
-                "role": "user",
-                "content": user_message,
-            }
-        ],
-        model="gpt-3.5-turbo",
-        stream=True,
-    )
-    st.subheader("Itinerary")
-    response = st.write_stream(chat_completion)
-    print(response)
-    # Call the flight_search function with the input dictionary
-    flight_data = flight_search(input_dict)
-
-    # Display flight information
-    flight_info = display_flight_info(flight_data)
-
-    st.subheader("Flight Details")
-    for city, flights in flight_info.items():
-        city_expander = st.expander(f"{city}")
-        with city_expander:
-            for flight in flights:
-                st.write(f"- {flight['Airline']}")
-                st.write(f"  Departure Time: {flight['Departure Time']}")
-                st.write(f"  Arrival Time: {flight['Arrival Time']}")
-                st.write(f"  Price: {flight['Price']} INR")
-                # Add more details as needed (amenities, images, etc.)
-                st.write("---")
-    content = response
-
-    # Split content into individual days
-    days = content.split("\n\n")
-
-    # Extract keywords for each day
-    proper_nouns_by_day = {}
-    for day in days:
-        lines = day.split("\n")
-        day_name = lines[0]
-        day_content = "\n".join(lines[1:])  # Exclude the day name
-
-        # Extract keywords for the day
-        keywords = extract_proper_nouns(day_content)
-        unique_proper_nouns = list(set(keywords))
-        # Store keywords for the day
-        proper_nouns_by_day[day_name] = unique_proper_nouns
-
-    # Print keywords for each day
-    for day, proper_nouns in proper_nouns_by_day.items():
-        print(f"Proper Nouns for {day}: {proper_nouns}")
-
-        fetch_images_from_pexels(proper_nouns)
-
-    return response, all_city_dict
-
-
-def fetch_images_from_pexels(proper_nouns):
-    # Pexels API configuration
-    API_KEY = 'HtfomN1StvNLr9SgjXbdC8qE8nuIHzbMXfwmWcHwRe24eNziS6kr5ifC'
-    base_url = 'https://api.pexels.com/v1/search'
-
-    for noun in proper_nouns:
-        # Set up parameters for the request
-        params = {'query': noun, 'per_page': 1}  # You can adjust 'per_page' as needed
-
-        # Make the request to Pexels API
-        response = requests.get(base_url, params=params, headers={'Authorization': API_KEY})
-
-        if response.status_code == 200:
-            # Extract image URL from the response
-            data = response.json()
-            if data['total_results'] > 0:
-                image_url = data['photos'][0]['src']['large']
-                # Save the image to a file
-                save_image(image_url, noun)
-            else:
-                print(f"No images found for {noun}")
-        else:
-            print(f"Error fetching images for {noun}")
-
-
 def display_flight_info(flight_data):
     city_flight_info = {}  # Dictionary to store flight info by city
 
@@ -375,6 +235,121 @@ def display_flight_info(flight_data):
     return city_flight_info
 
 
+@st.cache_data(show_spinner=False)
+def generate_itinerary(input_dict):
+    # Part 1: generate the list of cities and get the hotels
+    # Call the OpenAI API for creating the list of cities and dates
+    input_dict['end_date'] = str(input_dict['start_date'] + timedelta(days=input_dict['num_days']))
+    user_prompt = f"Generate a list of cities for a tour of {input_dict['dest']} for {input_dict['num_tourists']} " \
+                  f"people with {input_dict['num_adults']} adults, purpose as {input_dict['genre']} " \
+                  f"for {input_dict['num_days']} days and a budget per person of {input_dict['price_per_person']} INR starting on " \
+                  f"{input_dict['start_date']}, ending on {input_dict['end_date']}. Call the function 'get_flight_hotel_info'"
+
+    completion = client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[{"role": "user", "content": user_prompt}],
+        # Add function calling
+        functions=function_descriptions,
+        function_call="auto",  # specify the function call
+        max_tokens=200
+    )
+    output = completion.choices[0].message
+    cities = json.loads(output.function_call.arguments).get("loc_list")
+    dates = json.loads(output.function_call.arguments).get("date_list")
+    dates.append(input_dict['end_date'])
+
+    input_dict['cities'] = cities
+    input_dict['dates'] = dates
+    all_city_dict = {}
+
+    printables = {}
+    city_string = ''
+    for city in cities:
+        city_string+=city + '  '
+    st.subheader("Cities: ")
+    st.write(city_string)
+    printables['city_string'] = city_string
+
+    for i in range(len(cities)):
+        # st.write(cities[i], dates[i], dates[i+1], input_dict['num_adults'], input_dict['num_children'])
+        all_city_dict.update(get_hotel_data(cities[i], dates[i], dates[i+1], input_dict['num_adults'], input_dict['num_children']))
+    input_dict['hotels_by_city'] = all_city_dict
+
+
+    # Part 2: Actually generate the itinerary
+    user_message = f"Design a detailed itinerary for a trip from {input_dict['src']} to {input_dict['dest']} starting from {input_dict['start_date']} and for " \
+                   f"{input_dict['num_days']} days. The ordered list of cities is {cities} and of dates is {dates}. The budget for this trip is {input_dict['price_per_person']} INR per person. This trip is designed " \
+                   f"for {input_dict['num_tourists']} mainly with their {input_dict['type_of_travelers']} with an average age of {input_dict['average_age']}.The " \
+                   f"primary interests for activities are {input_dict['genre']}.The preferred mode(s) of travel include " \
+                   f"{input_dict['mode_of_travel']}.The group prefers {input_dict['food']} food. Please structure the itinerary with a detailed " \
+                   f"plan for each day, including activities, locations, weather according to the season they are " \
+                   f"travelling and estimated travel distances and times. Write the travel time and distance in the day's subheading. " \
+                   f"Ensure to consider the preferences and " \
+                   f"interests of the group for each day's schedule. Important considerations: Factor in travel time " \
+                   f"between destinations. Suggest local transportation options. Include a mix of activities that cater" \
+                   f" to the group's interests. Also add distance of travel for each day and approx time " \
+                   f"of travel. Also you can give a name for each day in the itinerary which will be more " \
+                   f"appealing. Keep the response descriptive and . Give a title to the itinerary. Do not suggest any activities " \
+                   f"in the first city."
+
+    # Generate the travel itinerary using the modified user message
+    chat_completion = client.chat.completions.create(
+        messages=[
+            {
+                "role": "user",
+                "content": user_message,
+            }
+        ],
+        model="gpt-3.5-turbo",
+        stream=True,
+    )
+
+    st.subheader("Itinerary")
+    response = st.write_stream(chat_completion)
+
+    flight_data = flight_search(input_dict)
+
+    # Display flight information
+    flight_info = display_flight_info(flight_data)
+    content=response
+    
+    
+    # Split content into individual days
+    days = content.split("\n\n")
+
+    st.session_state['input_dict'] = input_dict
+    return response, all_city_dict, flight_info, days, city_string
+
+
+def fetch_images_when_selected(selected_proper_noun):
+    if selected_proper_noun:
+        fetch_images_from_pexels([selected_proper_noun])
+
+
+def fetch_images_from_pexels(proper_noun):
+    # Pexels API configuration
+    API_KEY = 'HtfomN1StvNLr9SgjXbdC8qE8nuIHzbMXfwmWcHwRe24eNziS6kr5ifC'
+    base_url = 'https://api.pexels.com/v1/search'
+
+    # Set up parameters for the request
+    params = {'query': proper_noun, 'per_page': 1}
+
+    # Make the request to Pexels API
+    response = requests.get(base_url, params=params, headers={'Authorization': API_KEY})
+    print("Fetching images for:", proper_noun)
+
+    if response.status_code == 200:
+        # Extract image URL from the response
+        data = response.json()
+        if data['total_results'] > 0:
+            image_url = data['photos'][0]['src']['large']
+            # Save the image to a file
+            save_image(image_url, proper_noun)
+        else:
+            print(f"No images found for {proper_noun}")
+    else:
+        print(f"Error fetching images for {proper_noun}")
+
 
 def save_image(image_url, proper_nouns):
     # Create images directory if not exists
@@ -389,8 +364,7 @@ def save_image(image_url, proper_nouns):
             print(f"Image saved for {proper_nouns}")
     else:
         print(f"Failed to download image for {proper_nouns}")
-
-
+        
 # Download required NLTK resources
 nltk.download('punkt')
 nltk.download('averaged_perceptron_tagger')
@@ -401,13 +375,13 @@ nltk.download('words')
 def extract_proper_nouns(text):
     # Tokenize the text into words
     words = word_tokenize(text)
-
+    
     # Perform part-of-speech tagging
     tagged_words = pos_tag(words)
-
+    
     # Perform named entity recognition (NER)
     ne_tree = ne_chunk(tagged_words)
-
+    
     # Extract proper nouns from NER results
     proper_nouns = []
     for subtree in ne_tree:
@@ -417,25 +391,31 @@ def extract_proper_nouns(text):
         elif isinstance(subtree, tuple) and subtree[1] == 'NNP':
             # If it's tagged as a proper noun (NNP), add it to the list
             proper_nouns.append(subtree[0])
-
+    
     return proper_nouns
 
+
+@st.cache_data(show_spinner=False)
 
 def text_to_doc(itinerary, input_dict):
     document = Document()
     paragraph = document.add_paragraph()
     run = paragraph.add_run()
-    run.add_picture("logo.png", width=Inches(2.0))  # Adjust width as needed
-
-    # Set paragraph alignment to center
+    run.add_picture("images/Logo.png", width=Inches(2.0))  # Adjust width as needed
     paragraph.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
-    first_line = itinerary.split('\n')[1]
 
-    # Add the first line as a centered header
-    header = document.add_heading(level=1)
-    header_run = header.add_run(first_line)
-    header_run.font.size = Pt(16)  # Adjust font size if needed
-    header.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+    # Split the itinerary into lines
+    lines = itinerary.split('\n')
+
+    # Add the first line as a centered and bold paragraph
+    first_line = lines[0]
+    paragraph = document.add_paragraph()
+    paragraph.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+    run = paragraph.add_run(first_line)
+    run.bold = True
+    run.font.size = Pt(16)  # Set the font size to 16 points for "very bold"
+
+
     paragraph1 = document.add_paragraph()
     run1 = paragraph1.add_run("Destination: ")
     run1.bold = True
@@ -455,7 +435,7 @@ def text_to_doc(itinerary, input_dict):
     run2.bold = True
     run2 = paragraph2.add_run(str(input_dict['start_date']))
 
-    for line in itinerary.split('\n')[2:]:
+    for line in itinerary.split('\n')[1:]:
         paragraph = document.add_paragraph()
         for char in line:
             if char == '*':
@@ -484,15 +464,34 @@ def text_to_doc(itinerary, input_dict):
             for paragraph in cell.paragraphs:
                 paragraph.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
 
-    # Define a custom table style (optional)
+     # Define a custom table style (optional)
     table.style = 'Table Grid'
 
-    return document
+    doc_io = BytesIO()
+    document.save(doc_io)
+    doc_io.seek(0)
+    return doc_io
 
 
-st.cache(suppress_st_warning=True)(get_hotel_data)
-st.cache(suppress_st_warning=True)(generate_itinerary)
-past_itineraries = []  # List to store past itineraries
+def display_image_choices(days):
+    proper_nouns_by_day = {}
+    for day in days:
+        lines = day.split("\n")
+        day_name = lines[0]
+        day_content = "\n".join(lines[1:])  # Exclude the day name
+
+        # Extract keywords for the day
+        keywords = extract_proper_nouns(day_content)
+        unique_proper_nouns = list(set(keywords))
+
+        # Store keywords for the day
+        proper_nouns_by_day[day_name] = unique_proper_nouns
+    st.session_state['proper_nouns_by_day'] = proper_nouns_by_day
+    return proper_nouns_by_day
+
+
+
+st.session_state['past_itineraries'] = []  # List to store past itineraries
 input_dict = {}
 st.set_page_config(
     page_title="AI Tour Itinerary Generator",  # Set your desired title here
@@ -507,49 +506,44 @@ input_dict['src'] = col1.text_input("Source City", key='src')
 input_dict['genre'] = col1.text_input("Genre", key='genre')
 input_dict['type_of_travelers'] = col1.text_input("Type of Travelers", key='type', placeholder='ex. family, friends')
 input_dict['mode_of_travel'] = col1.text_input("Mode of Travel", key='mode', placeholder='ex. flight, bus, train')
-input_dict['num_days'] = col2.number_input("Number of Days", key='num_days', min_value=0, max_value=None, value=0,
-                                           step=1, format="%d")
+input_dict['num_days'] = col2.number_input("Number of Days", key='num_days', min_value=0, max_value=None, value=0, step=1, format="%d")
 input_dict['start_date'] = col2.date_input("Start Date", key='start_date')
 # Create sub-columns within col2
 col21, col22 = col2.columns(2)
 
-input_dict['num_adults'] = int(
-    col21.number_input("Number of Adults", key='num_adults', min_value=0, max_value=None, value=0, step=1, format="%d"))
-input_dict['num_children'] = int(
-    col22.number_input("Number of Children", key='num_children', min_value=0, max_value=None, value=0, step=1,
-                       format="%d"))
+input_dict['num_adults'] = int(col21.number_input("Number of Adults", key='num_adults', min_value=0, max_value=None, value=0, step=1, format="%d"))
+input_dict['num_children'] = int(col22.number_input("Number of Children", key='num_children', min_value=0, max_value=None, value=0, step=1, format="%d"))
 input_dict['price_per_person'] = col2.number_input("Price Per Person", key='price_per_person', min_value=0.0)
-input_dict['average_age'] = col2.number_input("Average age", key='average_age', min_value=0, max_value=None, value=0,
-                                              step=1, format="%d")
-input_dict['food'] = 'non veg + veg' if st.toggle('Include non-veg hotels') else 'veg'
-special_note = st.text_area("Special Note(Optional)", key='special_note')
+input_dict['average_age'] = col2.number_input("Average age", key='average_age', min_value=0, max_value=None, value=0, step=1, format="%d")
+input_dict['food'] = 'non veg' if st.toggle('Include non-veg hotels') else 'veg'
 
 input_dict['num_tourists'] = input_dict['num_adults'] + input_dict['num_children']
 
+
 if st.button("Generate Itinerary", type="primary"):
+    null_flag = False
     for key in input_dict.keys():
         if input_dict[key] is None:
             st.warning(f'Please enter {key}!')
+            null_flag = True
+            break
 
-    # Generate itinerary and get flight data
-    generated_itinerary, city_dict = generate_itinerary(input_dict)
+    if not null_flag:
+        generated_itinerary, city_dict, flight_info, days, city_string = generate_itinerary(input_dict)
+        st.session_state["cached_data_generated"] = True
+        st.session_state['past_itineraries'].append(generated_itinerary)  # Add to past itineraries
+        isGenerated = True
 
-    # Continue with the rest of the itinerary generation and display hotels as before
+elif st.session_state.get("cached_data_generated", False):
+    generated_itinerary, city_dict, flight_info, days, city_string = generate_itinerary(input_dict)
+    # st.subheader("Cities: ")
+    # st.write(city_string)
+    #
+    # st.subheader('Itinerary: ')
+    # st.write(generated_itinerary)
 
-    past_itineraries.append(generated_itinerary)  # Add to past itineraries
-    isGenerated = True
-    doc = text_to_doc(generated_itinerary, input_dict)
-    doc_io = BytesIO()
-    doc.save(doc_io)
-    doc_io.seek(0)
-    st.download_button(
-        label="Download Word Document",
-        data=doc_io,
-        file_name=f"{input_dict['dest']} Itinerary.docx",
-        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    )
 
-    # Main side panel for hotels
+if st.session_state.get("cached_data_generated", False):
     st.subheader("Hotels")
     for city, hotels in city_dict.items():
         city_expander = st.expander(f"{city}")
@@ -560,12 +554,47 @@ if st.button("Generate Itinerary", type="primary"):
                 st.write(f"  Price per day: {hotel['price']} INR")
                 st.write(f"  Rating: {hotel['rating']}")
                 # Add more details as needed (amenities, images, etc.)
-                st.write("---")  # Separator between hotels
+                st.write("---")  # Separator between hotels\
 
-    
+    st.subheader("Flight Details")
+    for city, flights in flight_info.items():
+        city_expander = st.expander(f"{city}")
+        with city_expander:
+            for flight in flights:
+                st.write(f"- {flight['Airline']}")
+                st.write(f"  Departure Time: {flight['Departure Time']}")
+                st.write(f"  Arrival Time: {flight['Arrival Time']}")
+                st.write(f"  Price: {flight['Price']} INR")
+                # Add more details as needed (amenities, images, etc.)
+                st.write("---")
+
+    if not st.session_state.get("proper_nouns_by_day", False):
+        proper_nouns_by_day = display_image_choices(days)
+
+    else:
+        proper_nouns_by_day = st.session_state["proper_nouns_by_day"]
+
+    for day, proper_nouns in proper_nouns_by_day.items():
+
+        if proper_nouns:
+            selected_proper_nouns = None
+            st.subheader(f"Choose image for {day}:")
+            selected_proper_nouns = st.selectbox(f"Choose image for {day}:", proper_nouns)
+
+            fetch_images_when_selected(selected_proper_nouns)
+
+    doc_io = text_to_doc(generated_itinerary, st.session_state['input_dict'])
+
+    st.download_button(
+        label="Download Word Document",
+        data=doc_io,
+        file_name=f"{input_dict['dest']} Itinerary.docx",
+        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    )
+
 with st.expander("Past Itineraries"):
-    if past_itineraries:
-        for itinerary in past_itineraries:
+    if st.session_state.get('past_itineraries', False):
+        for itinerary in st.session_state['past_itineraries:']:
             st.write(itinerary)
     else:
         st.write("No past itineraries yet.")
