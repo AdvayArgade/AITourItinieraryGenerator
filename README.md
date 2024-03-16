@@ -1,4 +1,4 @@
-# TourItineraryGenerator
+# Tour ItineraryGenerator
 
 **Usage:**
 
