@@ -17,11 +17,57 @@ import nltk
 from nltk import pos_tag, ne_chunk
 from nltk.tokenize import word_tokenize
 from amadeus import Client, ResponseError, Location
+import zipfile
 
-load_dotenv('keys.env')
-API_KEY = os.getenv('OPENAI_API_KEY')
-RAPID_API_KEY = os.getenv("X-RapidAPI-Key")
-RAPID_API_HOST = os.getenv("X-RapidAPI-Host")
+
+st.session_state['data_changed'] = False
+input_dict = {}
+st.set_page_config(
+    page_title="AI Tour Itinerary Generator",  # Set your desired title here
+    page_icon="images/favicon.ico",  # Set path to your favicon image (.ico format)
+)
+st.title("Tour Itinerary Generator")
+
+# Input fields for API keys
+st.subheader("API Key Input")
+API_KEY = st.text_input("Enter OpenAI API Key:")
+RAPID_API_KEY = st.text_input("Enter RapidAPI Key:")
+RAPID_API_HOST = st.text_input("Enter RapidAPI Host:")
+if st.button("Submit API Keys"):
+    # Store the API keys in session state
+    st.session_state["OPENAI_API_KEY"] = API_KEY
+    st.session_state["RAPID_API_KEY"] = RAPID_API_KEY
+    st.session_state["RAPID_API_HOST"] = RAPID_API_HOST
+
+    st.success("API Keys submitted successfully!")
+
+col1, col2 = st.columns(2)
+
+input_dict['dest'] = col1.text_input("Destination", key='dest')
+input_dict['src'] = col1.text_input("Source City", key='src')
+input_dict['genre'] = col1.text_input("Genre", key='genre')
+input_dict['type_of_travelers'] = col1.text_input("Type of Travelers", key='type', placeholder='ex. family, friends')
+input_dict['mode_of_travel'] = col1.text_input("Mode of Travel", key='mode', placeholder='ex. flight, bus, train')
+input_dict['num_days'] = col2.number_input("Number of Days", key='num_days', min_value=0, max_value=None, value=0,
+                                           step=1, format="%d")
+input_dict['start_date'] = col2.date_input("Start Date", key='start_date')
+# Create sub-columns within col2
+col21, col22 = col2.columns(2)
+
+input_dict['num_adults'] = int(
+    col21.number_input("Number of Adults", key='num_adults', min_value=0, max_value=None, value=0, step=1, format="%d"))
+input_dict['num_children'] = int(
+    col22.number_input("Number of Children", key='num_children', min_value=0, max_value=None, value=0, step=1,
+                       format="%d"))
+input_dict['price_per_person'] = col2.number_input("Price Per Person", key='price_per_person', min_value=0.0)
+input_dict['average_age'] = col2.number_input("Average age", key='average_age', min_value=0, max_value=None, value=0,
+                                              step=1, format="%d")
+input_dict['food'] = 'non veg' if st.toggle('Include non-veg hotels') else 'veg'
+special_note = st.text_area("Special Note(Optional)", key='special_note')
+
+
+input_dict['num_tourists'] = input_dict['num_adults'] + input_dict['num_children']
+
 
 client = OpenAI(api_key=API_KEY)
 
@@ -38,20 +84,20 @@ function_descriptions = [
             "type": "object",
             "properties": {
                 "loc_list": {
-                  "type": "array",
-                  "items": {
-                      "type": "string"
-                  },
-                  "description": "The ordered list of names of cities in the tour. e.g. ['Mumbai', 'Paris']"
-              },
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "The ordered list of names of cities in the tour. e.g. ['Mumbai', 'Paris']"
+                },
 
                 "date_list": {
-                  "type": "array",
-                  "items": {
-                      "type": "string"
-                  },
-                  "description": "The ordered list of dates for arrival in the cities in YYYY-MM-DD format."
-              },
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "The ordered list of dates for arrival in the cities in YYYY-MM-DD format."
+                },
 
             },
             "required": ["loc_list", "date_list"],
@@ -66,22 +112,22 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger('booking_com_api')
 
 
-
 def make_booking_com_api_call(url, headers, data):
-  logger.debug("API Request:")
-  logger.debug(f"URL: {url}")
-  logger.debug(f"Headers: {headers}")
-  logger.debug(f"Body: {data}")
+    logger.debug("API Request:")
+    logger.debug(f"URL: {url}")
+    logger.debug(f"Headers: {headers}")
+    logger.debug(f"Body: {data}")
 
-  # Make your API call using requests library
-  response = requests.get(url, headers=headers, json=data)
+    # Make your API call using requests library
+    response = requests.get(url, headers=headers, json=data)
 
-  logger.debug("API Response:")
-  logger.debug(f"Status Code: {response.status_code}")
-  logger.debug(f"Headers: {response.headers}")
-  logger.debug(f"Response Body: {response.json()}")
+    logger.debug("API Response:")
+    logger.debug(f"Status Code: {response.status_code}")
+    logger.debug(f"Headers: {response.headers}")
+    logger.debug(f"Response Body: {response.json()}")
 
-  return response
+    return response
+
 
 def get_hotel_data(city, checkin_date, checkout_date, num_adults, num_children):
     city_dict = {}
@@ -110,7 +156,7 @@ def get_hotel_data(city, checkin_date, checkout_date, num_adults, num_children):
             "units": "metric",
             "page_number": "0",
         }
-        if num_children>0:
+        if num_children > 0:
             querystring["children_number"] = num_children
         headers = {
             "X-RapidAPI-Key": RAPID_API_KEY,
@@ -268,16 +314,16 @@ def generate_itinerary(input_dict):
     printables = {}
     city_string = ''
     for city in cities:
-        city_string+=city + ' - '
+        city_string += city + ' - '
     st.subheader("Cities: ")
     st.write(city_string)
     printables['city_string'] = city_string
 
     for i in range(len(cities)):
         # st.write(cities[i], dates[i], dates[i+1], input_dict['num_adults'], input_dict['num_children'])
-        all_city_dict.update(get_hotel_data(cities[i], dates[i], dates[i+1], input_dict['num_adults'], input_dict['num_children']))
+        all_city_dict.update(
+            get_hotel_data(cities[i], dates[i], dates[i + 1], input_dict['num_adults'], input_dict['num_children']))
     input_dict['hotels_by_city'] = all_city_dict
-
 
     # Part 2: Actually generate the itinerary
     user_message = f"Design a detailed itinerary for a trip from {input_dict['src']} to {input_dict['dest']} starting from {input_dict['start_date']} and for " \
@@ -288,12 +334,12 @@ def generate_itinerary(input_dict):
                    f"plan for each day, including activities, locations, weather according to the season they are " \
                    f"travelling and estimated travel distances and times. Write the travel time and distance in the day's subheading. " \
                    f"Ensure to consider the preferences and " \
-                   f"interests of the group for each day's schedule. Important considerations: Factor in travel time " \
+                   f"interests of the group for each day's schedule.Also consider this note {special_note}. Important considerations: Factor in travel time " \
                    f"between destinations. Suggest local transportation options. Include a mix of activities that cater" \
                    f" to the group's interests. Also add distance of travel for each day and approx time " \
                    f"of travel. Also you can give a name for each day in the itinerary which will be more " \
                    f"appealing. Keep the response descriptive and . Give a title to the itinerary. Do not suggest any activities " \
-                   f"in the first city."
+                   f"in the first city if the travel time and distance is more otherwise we can suggest activities."
 
     # Generate the travel itinerary using the modified user message
     chat_completion = client.chat.completions.create(
@@ -314,9 +360,8 @@ def generate_itinerary(input_dict):
 
     # Display flight information
     flight_info = display_flight_info(flight_data)
-    content=response
-    
-    
+    content = response
+
     # Split content into individual days
     days = content.split("\n\n")
 
@@ -367,7 +412,8 @@ def save_image(image_url, proper_nouns):
             print(f"Image saved for {proper_nouns}")
     else:
         print(f"Failed to download image for {proper_nouns}")
-        
+
+
 # Download required NLTK resources
 nltk.download('punkt')
 nltk.download('averaged_perceptron_tagger')
@@ -378,13 +424,13 @@ nltk.download('words')
 def extract_proper_nouns(text):
     # Tokenize the text into words
     words = word_tokenize(text)
-    
+
     # Perform part-of-speech tagging
     tagged_words = pos_tag(words)
-    
+
     # Perform named entity recognition (NER)
     ne_tree = ne_chunk(tagged_words)
-    
+
     # Extract proper nouns from NER results
     proper_nouns = []
     for subtree in ne_tree:
@@ -394,7 +440,7 @@ def extract_proper_nouns(text):
         elif isinstance(subtree, tuple) and subtree[1] == 'NNP':
             # If it's tagged as a proper noun (NNP), add it to the list
             proper_nouns.append(subtree[0])
-    
+
     return proper_nouns
 
 
@@ -403,50 +449,191 @@ def text_to_doc(itinerary, input_dict):
     document = Document()
     paragraph = document.add_paragraph()
     run = paragraph.add_run()
-    run.add_picture("images/Logo.png", width=Inches(2.0))  # Adjust width as needed
+    run.add_picture("icons/logo.png", width=Inches(2.7))  # Adjust width as needed
     paragraph.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
 
-    # Split the itinerary into lines
-    lines = itinerary.split('\n')
+    first_line = itinerary.split('\n')[1]
 
-    # Add the first line as a centered and bold paragraph
-    first_line = lines[0]
-    paragraph = document.add_paragraph()
-    paragraph.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
-    run = paragraph.add_run(first_line)
-    run.bold = True
-    run.font.size = Pt(16)  # Set the font size to 16 points for "very bold"
+    # Add the first line as a centered header
+    header = document.add_heading(level=1)
+    header_run = header.add_run(first_line)
+    header_run.font.size = Pt(16)
+    header.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
 
+    # Add subheader with small images
+    subheader_text = f"{input_dict['num_days']} | {input_dict['start_date']} | {input_dict['dest']} to {input_dict['src']}"
+    subheader_paragraph = document.add_paragraph()
+    subheader_paragraph.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
 
-    paragraph1 = document.add_paragraph()
-    run1 = paragraph1.add_run("Destination: ")
-    run1.bold = True
-    run1 = paragraph1.add_run(input_dict['dest'])
+    # Function to add image and text with specified width
+    def add_image_run(paragraph, image_path, text, image_width):
+        run = paragraph.add_run()
+        run.add_picture(image_path, width=image_width)
+        run.add_text(text)
 
-    paragraph2 = document.add_paragraph()
-    run2 = paragraph2.add_run("Duration: ")
-    run2.bold = True
-    run2 = paragraph2.add_run(str(input_dict['num_days']))
+    # Define a list of different image paths
+    image_paths = ["icons/cal.png", "icons/global.jpeg", "icons/gps.png"]  # Add more paths as needed
+
+    # Add subheader components with images
+    for index, component in enumerate(subheader_text.split(" | ")):
+        image_path = image_paths[index] if index < len(image_paths) else image_paths[
+            -1]  # Use the last image if there are more components than images
+        add_image_run(subheader_paragraph, image_path, component, Inches(0.15))
 
     paragraph3 = document.add_paragraph()
-    run3 = paragraph3.add_run("Interests: ")
+    run3 = paragraph3.add_run("Main Focus ")
     run3.bold = True
     run3 = paragraph3.add_run(input_dict['genre'])
-    paragraph2 = document.add_paragraph()
-    run2 = paragraph2.add_run("Commences on: ")
-    run2.bold = True
-    run2 = paragraph2.add_run(str(input_dict['start_date']))
 
-    for line in itinerary.split('\n')[1:]:
+    paragraph4 = document.add_paragraph()
+    run4 = paragraph4.add_run("Commences on: ")
+    run4.bold = True
+    run4 = paragraph4.add_run(str(input_dict['start_date']))
+
+    paragraph6 = document.add_paragraph()
+    run6 = paragraph6.add_run("Budget : ")
+    run6.bold = True
+    run6 = paragraph6.add_run(str(input_dict['price_per_person']))
+
+    # Add countries and cities covered
+    paragraph5 = document.add_paragraph()
+    run5 = paragraph5.add_run("Countries and Cities Covered:")
+    run5.bold = True
+
+    # Join the city names with a comma
+    city_names = ", ".join(input_dict['cities'])
+
+    # Add all city names in a single paragraph
+    document.add_paragraph(f"- {city_names}")
+
+    line_paragraph = document.add_paragraph()
+    line_run = line_paragraph.add_run(
+        "_")
+
+    # Set the font size of the line
+    line_font = line_run.font
+    line_font.size = Pt(12)
+
+    # Set the paragraph alignment to center
+    line_paragraph.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+
+    # Function to check if a specific word is present in the itinerary
+    paragraph = document.add_paragraph("")
+
+    paragraph.bold = True
+
+    def contains_word(itinerary, word):
+        return word.lower() in itinerary.lower()
+
+    # Function to add image without text
+    def add_image_without_text(paragraph, image_path, image_width):
+        run = paragraph.add_run()
+        run.add_picture(image_path, width=image_width)
+
+    # Check if the word "hotel" is present in the itinerary
+    if contains_word(itinerary, "hotel"):
+        add_image_without_text(paragraph, "icons/hotel.png", Inches(1))
+    if contains_word(itinerary, "flight"):
+        add_image_without_text(paragraph, "icons/flight.jpeg", Inches(1))
+    if contains_word(itinerary, "eat"):
+        add_image_without_text(paragraph, "icons/meal.png", Inches(1))
+    if contains_word(itinerary, "attraction"):
+        add_image_without_text(paragraph, "icons/sightseeing.png", Inches(1))
+    if contains_word(itinerary, "train"):
+        add_image_without_text(paragraph, "icons/train.jpeg", Inches(1))
+    if contains_word(itinerary, "religious"):
+        add_image_without_text(paragraph, "icons/religious.png", Inches(1))
+    if contains_word(itinerary, "work"):
+        add_image_without_text(paragraph, "icons/work.png", Inches(1))
+
+    paragraph.add_run().add_break()  # Add a blank line
+
+    paragraph.add_run().add_break()  # Add a blank line
+
+    paragraph5 = document.add_paragraph()
+    a = paragraph5.add_run("Tour Itinerary :")
+    a.bold = True
+    for line in itinerary.split('\n')[2:]:
         paragraph = document.add_paragraph()
+        image_added = False  # Flag variable to track whether an image has been added to the line
         for char in line:
-            if char == '*':
-                run = paragraph.add_run()
+            if "distance" in line and "Day" not in line and not image_added:
+                add_image_without_text(paragraph, "icons/distance.png", Inches(0.4))
+                image_added = True
+            elif "Dinner" in line and "Day" not in line and not image_added:
+                add_image_without_text(paragraph, "icons/meal.png", Inches(0.4))
+                image_added = True
+            elif "Lunch" in line and "Day" not in line and not image_added:
+                add_image_without_text(paragraph, "icons/meal.png", Inches(0.4))
+                image_added = True
+            elif "Breakfast" in line and "Day" not in line and not image_added:
+                add_image_without_text(paragraph, "icons/breakfast.jpeg", Inches(0.5))
+                image_added = True
+            elif "hotel" in line and "Day" not in line and not image_added:
+                add_image_without_text(paragraph, "icons/hotel1.png", Inches(0.4))
+                image_added = True
+            elif "visit" in line and "Day" not in line and not image_added:
+                add_image_without_text(paragraph, "icons/sightseeing.png", Inches(0.3))
+                image_added = True
+            elif "Visit" in line and "Day" not in line and not image_added:
+                add_image_without_text(paragraph, "icons/sightseeing.png", Inches(0.3))
+                image_added = True
+            elif "arrive" in line and "Day" not in line and not image_added:
+                add_image_without_text(paragraph, "icons/work.png", Inches(0.4))
+                image_added = True
+            elif "Arrive" in line and "Day" not in line and not image_added:
+                add_image_without_text(paragraph, "icons/work.png", Inches(0.4))
+                image_added = True
+            elif "trek" in line and "Day" not in line and not image_added:
+                add_image_without_text(paragraph, "icons/religious.png", Inches(0.3))
+                image_added = True
+            elif "Trek" in line and "Day" not in line and not image_added:
+                add_image_without_text(paragraph, "icons/religious.png", Inches(0.3))
+                image_added = True
+            elif "Distance" in line and "Day" not in line and not image_added:
+                add_image_without_text(paragraph, "icons/distance.png", Inches(0.3))
+                image_added = True
+            elif "Travel" in line and "Day" not in line and not image_added:
+                add_image_without_text(paragraph, "icons/distance.png", Inches(0.3))
+                image_added = True
+            elif "Discover" in line and "Day" not in line and not image_added:
+                add_image_without_text(paragraph, "icons/sightseeing.png", Inches(0.3))
+                image_added = True
+            elif "Explore" in line and "Day" not in line and not image_added:
+                add_image_without_text(paragraph, "icons/sightseeing.png", Inches(0.3))
+                image_added = True
+            elif "sunset" in line and "Day" not in line and not image_added:
+                add_image_without_text(paragraph, "icons/sunset.jpeg", Inches(0.3))
+                image_added = True
+            elif "Taste" in line and "Day" not in line and not image_added:
+                add_image_without_text(paragraph, "icons/breakfast.jpeg", Inches(0.5))
+                image_added = True
+            elif "views" in line and "Day" not in line and not image_added:
+                add_image_without_text(paragraph, "icons/sightseeing.png", Inches(0.3))
+                image_added = True
+            elif "Depart" in line and "Day" not in line and not image_added:
+                add_image_without_text(paragraph, "icons/work.png", Inches(0.3))
+                image_added = True
+            elif "Fly" in line and "Day" not in line and not image_added:
+                add_image_without_text(paragraph, "icons/flight.jpeg", Inches(0.3))
+                image_added = True
+            elif "local" in line and "Day" not in line and not image_added:
+                add_image_without_text(paragraph, "icons/local.jpeg", Inches(0.3))
+                image_added = True
+        for char in line:
+            if "Day" in line:
+                run = paragraph.add_run(char)
                 run.bold = True
+                run.italic = True
+                run.font.size = Pt(12)
+                run.font.name = 'Arial'
+                for run in paragraph.runs:
+                    run.font.underline = True
+
             else:
                 run = paragraph.add_run(char)
 
-    # we will put over data here
+    # Add a table
     table_data = [
         ["Destination", " Hotel"],
     ]
@@ -466,8 +653,9 @@ def text_to_doc(itinerary, input_dict):
             for paragraph in cell.paragraphs:
                 paragraph.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
 
-     # Define a custom table style (optional)
+    # Define a custom table style (optional)
     table.style = 'Table Grid'
+
 
     doc_io = BytesIO()
     document.save(doc_io)
@@ -492,34 +680,14 @@ def display_image_choices(days):
     st.session_state['proper_nouns_by_day'] = proper_nouns_by_day
     return proper_nouns_by_day
 
+def create_zip_file():
+    # Get the list of image files in the images directory
+    image_files = [filename for filename in os.listdir("images") if filename.endswith(".jpg")]
 
-st.session_state['data_changed'] = False
-input_dict = {}
-st.set_page_config(
-    page_title="AI Tour Itinerary Generator",  # Set your desired title here
-    page_icon="images/favicon.ico",  # Set path to your favicon image (.ico format)
-)
-st.title("Tour Itinerary Generator")
-
-col1, col2 = st.columns(2)
-
-input_dict['dest'] = col1.text_input("Destination", key='dest')
-input_dict['src'] = col1.text_input("Source City", key='src')
-input_dict['genre'] = col1.text_input("Genre", key='genre')
-input_dict['type_of_travelers'] = col1.text_input("Type of Travelers", key='type', placeholder='ex. family, friends')
-input_dict['mode_of_travel'] = col1.text_input("Mode of Travel", key='mode', placeholder='ex. flight, bus, train')
-input_dict['num_days'] = col2.number_input("Number of Days", key='num_days', min_value=0, max_value=None, value=0, step=1, format="%d")
-input_dict['start_date'] = col2.date_input("Start Date", key='start_date')
-# Create sub-columns within col2
-col21, col22 = col2.columns(2)
-
-input_dict['num_adults'] = int(col21.number_input("Number of Adults", key='num_adults', min_value=0, max_value=None, value=0, step=1, format="%d"))
-input_dict['num_children'] = int(col22.number_input("Number of Children", key='num_children', min_value=0, max_value=None, value=0, step=1, format="%d"))
-input_dict['price_per_person'] = col2.number_input("Price Per Person", key='price_per_person', min_value=0.0)
-input_dict['average_age'] = col2.number_input("Average age", key='average_age', min_value=0, max_value=None, value=0, step=1, format="%d")
-input_dict['food'] = 'non veg' if st.toggle('Include non-veg hotels') else 'veg'
-
-input_dict['num_tourists'] = input_dict['num_adults'] + input_dict['num_children']
+    # Create a zip file
+    with zipfile.ZipFile("images.zip", "w") as zipf:
+        for image_file in image_files:
+            zipf.write(os.path.join("images", image_file), image_file)
 
 if st.session_state.get('input_dict', False):
     for key in input_dict.keys():
@@ -543,7 +711,6 @@ if st.button("Generate Itinerary", type="primary"):
 
 elif st.session_state.get("cached_data_generated", False) and not st.session_state['data_changed']:
     generated_itinerary, city_dict, flight_info, days, city_string = generate_itinerary(input_dict)
-
 
 if st.session_state.get("cached_data_generated", False) and not st.session_state['data_changed']:
     st.subheader("Hotels")
@@ -589,4 +756,14 @@ if st.session_state.get("cached_data_generated", False) and not st.session_state
         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     )
 
-
+    if st.button("Convert Images as Zip"):
+        create_zip_file()
+    # Download the zip file
+    with open("images.zip", "rb") as f:
+        zip_data = f.read()
+        st.download_button(
+            label="Download Zip",
+            data=zip_data,
+            file_name="images.zip",
+            mime="application/zip"
+        )
