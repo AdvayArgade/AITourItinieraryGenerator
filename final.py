@@ -1,3 +1,4 @@
+import pickle
 import re
 from datetime import timedelta
 import json
@@ -382,16 +383,17 @@ def generate_itinerary(input_dict):
                    f"for {input_dict['num_tourists']} mainly with their {input_dict['type_of_travelers']} with an average age of {input_dict['average_age']}.The " \
                    f"primary interests for activities are {input_dict['genre']}.The preferred mode(s) of travel include " \
                    f"{input_dict['mode_of_travel']}.The group prefers {input_dict['food']} food. Please structure the itinerary with a detailed " \
-                   f"plan for each day, including activities, locations, weather according to the season they are " \
-                   f"travelling and estimated travel distances and times. Write the travel time and distance in the day's subheading. " \
+                   f"plan for each day along with a every day title and no word should get repeated in a title of other days, including activities, locations, weather according to the season they are " \
+                   f"travelling and estimated travel distances and times(Do not give null values if you cannot extract information). Write the travel time and distance in the day's subheading. " \
                    f"Ensure to consider the preferences and " \
-                   f"interests of the group for each day's schedule.Also consider this note {special_note}. Important considerations: Factor in travel time " \
+                   f"interests of the group for each day's schedule. Important considerations: Factor in travel time " \
                    f"between destinations. Suggest local transportation options. Include a mix of activities that cater" \
-                   f" to the group's interests. Also add distance of travel for each day and approx time " \
+                   f" to the group's interests. Also add distance of travel for each day and approx time(do not give null value sif not available) " \
                    f"of travel. Also you can give a name for each day in the itinerary which will be more " \
-                   f"appealing. Keep the response descriptive and . Give a title to the itinerary. Do not suggest any activities " \
-                   f"in the first city if the travel time and distance is more otherwise we can suggest activities."
-
+                   f"appealing. Keep the response descriptive and . Give a title to the itinerary but make sure you don't repeat location names in multiple days also you can mention prime locations in title that are going to be there in iternary. Do not suggest any activities " \
+                   f"in the first city if the travel time and distance is more otherwise we can suggest activities." \
+                   f"Finally the description for each day which should look like if a human is speaking(this paragraph will be under the heading for each day)" \
+ \
     # Generate the travel itinerary using the modified user message
     chat_completion = client.chat.completions.create(
         messages=[
@@ -433,6 +435,8 @@ def generate_itinerary(input_dict):
             print(f"No image found for {title.strip()}")
 
     st.session_state['input_dict'] = input_dict
+    with open('input_dict.pickle', 'wb') as handle:
+        pickle.dump(input_dict, handle, protocol=pickle.HIGHEST_PROTOCOL)
     return response, all_city_dict, flight_info, days, city_string
 
 
@@ -573,9 +577,10 @@ def text_to_doc(itinerary, input_dict):
     first_line = itinerary.split('\n')[0]
 
     # Add the first line as a centered header
-    header = document.add_heading(level=1)
+    header = document.add_heading(level=0)
     header_run = header.add_run(first_line)
-    header_run.font.size = Pt(16)
+    header_run.font.size = Pt(22)
+    header_run.font.name = 'Bahnschrift'
     header.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
 
     # Add subheader with small images
@@ -675,80 +680,36 @@ def text_to_doc(itinerary, input_dict):
         paragraph = document.add_paragraph()
         image_added = False  # Flag variable to track whether an image has been added to the line
         for char in line:
-            if "distance" in line and "Day" not in line and not image_added:
-                add_image_without_text(paragraph, "icons/distance.png", Inches(0.4))
+            # if "Dinner" in line and "Day" not in line and not image_added:
+            #     add_image_without_text(paragraph, "icons/meal.png", Inches(0.4))
+            #     image_added = True
+            # elif "Lunch" in line and "Day" not in line and not image_added:
+            #     add_image_without_text(paragraph, "icons/meal.png", Inches(0.4))
+            #     image_added = True
+            # elif "Breakfast" in line and "Day" not in line and not image_added:
+            #     add_image_without_text(paragraph, "icons/breakfast.jpeg", Inches(0.4))
+            #     image_added = True
+            if "Travel Distance" in line and "Day" not in line and not image_added:
+                add_image_without_text(paragraph, "icons/travel_distance.jpeg", Inches(0.4))
                 image_added = True
-            elif "Dinner" in line and "Day" not in line and not image_added:
-                add_image_without_text(paragraph, "icons/meal.png", Inches(0.4))
+            elif "Travel Time" in line and "Day" not in line and not image_added:
+                add_image_without_text(paragraph, "icons/travel_time.jpeg", Inches(0.4))
                 image_added = True
-            elif "Lunch" in line and "Day" not in line and not image_added:
-                add_image_without_text(paragraph, "icons/meal.png", Inches(0.4))
-                image_added = True
-            elif "Breakfast" in line and "Day" not in line and not image_added:
-                add_image_without_text(paragraph, "icons/breakfast.jpeg", Inches(0.5))
-                image_added = True
-            elif "hotel" in line and "Day" not in line and not image_added:
-                add_image_without_text(paragraph, "icons/hotel1.png", Inches(0.4))
-                image_added = True
-            elif "visit" in line and "Day" not in line and not image_added:
-                add_image_without_text(paragraph, "icons/sightseeing.png", Inches(0.3))
-                image_added = True
-            elif "Visit" in line and "Day" not in line and not image_added:
-                add_image_without_text(paragraph, "icons/sightseeing.png", Inches(0.3))
-                image_added = True
-            elif "arrive" in line and "Day" not in line and not image_added:
-                add_image_without_text(paragraph, "icons/work.png", Inches(0.4))
-                image_added = True
-            elif "Arrive" in line and "Day" not in line and not image_added:
-                add_image_without_text(paragraph, "icons/work.png", Inches(0.4))
-                image_added = True
-            elif "trek" in line and "Day" not in line and not image_added:
-                add_image_without_text(paragraph, "icons/religious.png", Inches(0.3))
-                image_added = True
-            elif "Trek" in line and "Day" not in line and not image_added:
-                add_image_without_text(paragraph, "icons/religious.png", Inches(0.3))
-                image_added = True
-            elif "Distance" in line and "Day" not in line and not image_added:
-                add_image_without_text(paragraph, "icons/distance.png", Inches(0.3))
-                image_added = True
-            elif "Travel" in line and "Day" not in line and not image_added:
-                add_image_without_text(paragraph, "icons/distance.png", Inches(0.3))
-                image_added = True
-            elif "Discover" in line and "Day" not in line and not image_added:
-                add_image_without_text(paragraph, "icons/sightseeing.png", Inches(0.3))
-                image_added = True
-            elif "Explore" in line and "Day" not in line and not image_added:
-                add_image_without_text(paragraph, "icons/sightseeing.png", Inches(0.3))
-                image_added = True
-            elif "sunset" in line and "Day" not in line and not image_added:
-                add_image_without_text(paragraph, "icons/sunset.jpeg", Inches(0.3))
-                image_added = True
-            elif "Taste" in line and "Day" not in line and not image_added:
-                add_image_without_text(paragraph, "icons/breakfast.jpeg", Inches(0.5))
-                image_added = True
-            elif "views" in line and "Day" not in line and not image_added:
-                add_image_without_text(paragraph, "icons/sightseeing.png", Inches(0.3))
-                image_added = True
-            elif "Depart" in line and "Day" not in line and not image_added:
-                add_image_without_text(paragraph, "icons/work.png", Inches(0.3))
-                image_added = True
-            elif "Fly" in line and "Day" not in line and not image_added:
-                add_image_without_text(paragraph, "icons/flight.jpeg", Inches(0.3))
-                image_added = True
-            elif "local" in line and "Day" not in line and not image_added:
-                add_image_without_text(paragraph, "icons/local.jpeg", Inches(0.3))
-                image_added = True
+            # elif "Fly" in line and "Day" not in line and not image_added:
+            #     add_image_without_text(paragraph, "icons/flight.jpeg", Inches(0.4))
+            #     image_added = True
+
         for char in line:
             if "Day" in line:
                 run = paragraph.add_run(char)
                 run.bold = True
-                run.italic = True
-                run.font.size = Pt(12)
-                run.font.name = 'Arial'
-                for run in paragraph.runs:
-                    run.font.underline = True
+                run.font.size = Pt(14)
+                run.font.name = 'Aptos'
+
 
             else:
+                run.font.name = 'Avenir Next LT Pro'
+                run.font.size = Pt(12)
                 run = paragraph.add_run(char)
 
         # Add image after each day's description
@@ -892,3 +853,10 @@ if st.session_state.get("cached_data_generated", False) and not st.session_state
                 )
 
 
+# Change icons
+# Use a single image for the poster
+# Mention the meaning of each icon below the title
+# Mention end date
+# Number of nights per city
+# Date of each day
+# change the font
