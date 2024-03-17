@@ -1,0 +1,11 @@
+datetime
+json
+math
+requests
+streamlit
+geopy
+openai
+python-dotenv
+python-docx
+nltk
+amadeus
