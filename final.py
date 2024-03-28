@@ -22,6 +22,9 @@ from nltk.tokenize import word_tokenize
 from amadeus import Client, ResponseError, Location
 import zipfile
 from dotenv import set_key, load_dotenv, dotenv_values
+from docxtpl import DocxTemplate
+from spire.doc import *
+from spire.doc.common import *
 
 RAPID_API_HOST = "booking-com.p.rapidapi.com"
 st.session_state['data_changed'] = False
@@ -568,185 +571,267 @@ def extract_proper_nouns(text):
 
 @st.cache_data(show_spinner=False)
 def text_to_doc(itinerary, input_dict):
-    document = Document()
-    paragraph = document.add_paragraph()
-    run = paragraph.add_run()
-    run.add_picture("icons/logo.png", width=Inches(2.7))  # Adjust width as needed
-    paragraph.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+    # document = Document()
+    # paragraph = document.add_paragraph()
+    # run = paragraph.add_run()
+    # run.add_picture("icons/logo.png", width=Inches(2.7))  # Adjust width as needed
+    # paragraph.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+    #
+    # first_line = itinerary.split('\n')[0]
+    #
+    # # Add the first line as a centered header
+    # header = document.add_heading(level=0)
+    # header_run = header.add_run(first_line)
+    # header_run.font.size = Pt(22)
+    # header_run.font.name = 'Bahnschrift'
+    # header.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+    #
+    # # Add subheader with small images
+    # subheader_text = f"{input_dict['num_days']} | {input_dict['start_date']} | {input_dict['dest']} to {input_dict['src']}"
+    # subheader_paragraph = document.add_paragraph()
+    # subheader_paragraph.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+    #
+    # # Function to add image and text with specified width
+    # def add_image_run(paragraph, image_path, text, image_width):
+    #     run = paragraph.add_run()
+    #     run.add_picture(image_path, width=image_width)
+    #     run.add_text(text)
+    #
+    # # Define a list of different image paths
+    # image_paths = ["icons/cal.png", "icons/global.jpeg", "icons/gps.png"]  # Add more paths as needed
+    #
+    # # Add subheader components with images
+    # for index, component in enumerate(subheader_text.split(" | ")):
+    #     image_path = image_paths[index] if index < len(image_paths) else image_paths[
+    #         -1]  # Use the last image if there are more components than images
+    #     add_image_run(subheader_paragraph, image_path, component, Inches(0.15))
+    #
+    # paragraph3 = document.add_paragraph()
+    # run3 = paragraph3.add_run("Main Focus ")
+    # run3.bold = True
+    # run3 = paragraph3.add_run(input_dict['genre'])
+    #
+    # paragraph4 = document.add_paragraph()
+    # run4 = paragraph4.add_run("Commences on: ")
+    # run4.bold = True
+    # run4 = paragraph4.add_run(str(input_dict['start_date']))
+    #
+    # paragraph6 = document.add_paragraph()
+    # run6 = paragraph6.add_run("Budget : ")
+    # run6.bold = True
+    # run6 = paragraph6.add_run(str(input_dict['price_per_person']))
+    #
+    # # Add countries and cities covered
+    # paragraph5 = document.add_paragraph()
+    # run5 = paragraph5.add_run("Countries and Cities Covered:")
+    # run5.bold = True
+    #
+    # # Join the city names with a comma
+    # city_names = ", ".join(input_dict['cities'])
+    #
+    # # Add all city names in a single paragraph
+    # document.add_paragraph(f"- {city_names}")
+    #
+    # line_paragraph = document.add_paragraph()
+    # line_run = line_paragraph.add_run(
+    #     "_")
+    #
+    # # Set the font size of the line
+    # line_font = line_run.font
+    # line_font.size = Pt(12)
+    #
+    # # Set the paragraph alignment to center
+    # line_paragraph.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+    #
+    # # Function to check if a specific word is present in the itinerary
+    # paragraph = document.add_paragraph("")
+    #
+    # paragraph.bold = True
+    #
+    # def contains_word(itinerary, word):
+    #     return word.lower() in itinerary.lower()
+    #
+    # # Function to add image without text
+    # def add_image_without_text(paragraph, image_path, image_width):
+    #     run = paragraph.add_run()
+    #     run.add_picture(image_path, width=image_width)
+    #
+    # # Check if the word "hotel" is present in the itinerary
+    # if contains_word(itinerary, "hotel"):
+    #     add_image_without_text(paragraph, "icons/hotel.png", Inches(1))
+    # if contains_word(itinerary, "flight"):
+    #     add_image_without_text(paragraph, "icons/flight.jpeg", Inches(1))
+    # if contains_word(itinerary, "eat"):
+    #     add_image_without_text(paragraph, "icons/meal.png", Inches(1))
+    # if contains_word(itinerary, "attraction"):
+    #     add_image_without_text(paragraph, "icons/sightseeing.png", Inches(1))
+    # if contains_word(itinerary, "train"):
+    #     add_image_without_text(paragraph, "icons/train.jpeg", Inches(1))
+    # if contains_word(itinerary, "religious"):
+    #     add_image_without_text(paragraph, "icons/religious.png", Inches(1))
+    # if contains_word(itinerary, "work"):
+    #     add_image_without_text(paragraph, "icons/work.png", Inches(1))
+    #
+    # paragraph.add_run().add_break()  # Add a blank line
+    #
+    # paragraph.add_run().add_break()  # Add a blank line
+    #
+    # paragraph5 = document.add_paragraph()
+    # a = paragraph5.add_run("Tour Itinerary :")
+    # a.bold = True
+    # for line in itinerary.split('\n')[2:]:
+    #     paragraph = document.add_paragraph()
+    #     image_added = False  # Flag variable to track whether an image has been added to the line
+    #     for char in line:
+    #         # if "Dinner" in line and "Day" not in line and not image_added:
+    #         #     add_image_without_text(paragraph, "icons/meal.png", Inches(0.4))
+    #         #     image_added = True
+    #         # elif "Lunch" in line and "Day" not in line and not image_added:
+    #         #     add_image_without_text(paragraph, "icons/meal.png", Inches(0.4))
+    #         #     image_added = True
+    #         # elif "Breakfast" in line and "Day" not in line and not image_added:
+    #         #     add_image_without_text(paragraph, "icons/breakfast.jpeg", Inches(0.4))
+    #         #     image_added = True
+    #         if "Travel Distance" in line and "Day" not in line and not image_added:
+    #             add_image_without_text(paragraph, "icons/travel_distance.jpeg", Inches(0.4))
+    #             image_added = True
+    #         elif "Travel Time" in line and "Day" not in line and not image_added:
+    #             add_image_without_text(paragraph, "icons/travel_time.jpeg", Inches(0.4))
+    #             image_added = True
+    #         # elif "Fly" in line and "Day" not in line and not image_added:
+    #         #     add_image_without_text(paragraph, "icons/flight.jpeg", Inches(0.4))
+    #         #     image_added = True
+    #
+    #     for char in line:
+    #         if "Day" in line:
+    #             run = paragraph.add_run(char)
+    #             run.bold = True
+    #             run.font.size = Pt(14)
+    #             run.font.name = 'Aptos'
+    #
+    #
+    #         else:
+    #             run.font.name = 'Avenir Next LT Pro'
+    #             run.font.size = Pt(12)
+    #             run = paragraph.add_run(char)
+    #
+    #     # Add image after each day's description
+    #     if line.startswith("Day"):
+    #         day_number = line.split()[1].rstrip(":")  # Extract day number and remove the colon
+    #         image_path = f"images/day{day_number}.jpg"  # Form the image path
+    #         if os.path.exists(image_path):
+    #             paragraph.add_run("\n")
+    #             add_image_without_text(paragraph, image_path, Inches(2))  # Adjust width as needed
+    #
+    # # Add a table
+    # table_data = [
+    #     ["Destination", " Hotel"],
+    # ]
+    # for city in input_dict['cities']:
+    #     table_data.append([city, ''])
+    #
+    # table = document.add_table(rows=len(table_data), cols=2)
+    #
+    # # adding data to table
+    # for i, row_data in enumerate(table_data):
+    #     for j, cell_data in enumerate(row_data):
+    #         table.cell(i, j).text = cell_data
+    #
+    # # Apply alignment to the table
+    # for row in table.rows:
+    #     for cell in row.cells:
+    #         for paragraph in cell.paragraphs:
+    #             paragraph.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+    #
+    # # Define a custom table style (optional)
+    # table.style = 'Table Grid'
+    day_itineraries = generate_day_itineraries(itinerary)
+    day_itineraries = {day_number: '\n'.join(day_itinerary.split('\n')[1:]) for day_number, day_itinerary in
+                       day_itineraries.items()}
 
-    first_line = itinerary.split('\n')[0]
+    # Load the template document
+    tpl = DocxTemplate("mergeDocs/daywise_itinerary.docx")
 
-    # Add the first line as a centered header
-    header = document.add_heading(level=0)
-    header_run = header.add_run(first_line)
-    header_run.font.size = Pt(22)
-    header_run.font.name = 'Bahnschrift'
-    header.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+    for day_number, day_itinerary in day_itineraries.items():
+        # Extract the first line of the itinerary
+        first_line = day_itinerary.split('\n')[0]
+        second_line = day_itinerary.split('\n')[1]
+        print("Inside the text_to_doc func: ", day_itinerary, 'First line: ', first_line, 'Second line: ', day_itinerary)
+        # Join city names into a comma-separated string
+        city_names = ", ".join(input_dict['cities'])
 
-    # Add subheader with small images
-    subheader_text = f"{input_dict['num_days']} | {input_dict['start_date']} | {input_dict['dest']} to {input_dict['src']}"
-    subheader_paragraph = document.add_paragraph()
-    subheader_paragraph.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+        # Define the context dictionary
+        context = {
+            'tour_heading': first_line,
+            'num_days': input_dict['num_days'],
+            'budget': input_dict['price_per_person'],
+            'cities': city_names,
+            'day_itinerary': day_itinerary,
+            'day_title': second_line
+        }
 
-    # Function to add image and text with specified width
-    def add_image_run(paragraph, image_path, text, image_width):
-        run = paragraph.add_run()
-        run.add_picture(image_path, width=image_width)
-        run.add_text(text)
+        # Replace placeholders in the document
+        tpl.render(context)
 
-    # Define a list of different image paths
-    image_paths = ["icons/cal.png", "icons/global.jpeg", "icons/gps.png"]  # Add more paths as needed
+        # Replace the placeholder for day in the itinerary and change day_title
+        for paragraph in tpl.paragraphs:
+            if '{{day_title}}' in paragraph.text:
+                paragraph.text = paragraph.text.replace('{{day_title}}', f'Day {day_number}')
+            if '{{num_days}}' in paragraph.text:
+                paragraph.text = paragraph.text.replace('{{num_days}}', str(input_dict['num_days']))
+            if '{{cities}}' in paragraph.text:
+                paragraph.text = paragraph.text.replace('{{cities}}', city_names)
+            if '{{budget}}' in paragraph.text:
+                paragraph.text = paragraph.text.replace('{{budget}}', input_dict['price_per_person'])
 
-    # Add subheader components with images
-    for index, component in enumerate(subheader_text.split(" | ")):
-        image_path = image_paths[index] if index < len(image_paths) else image_paths[
-            -1]  # Use the last image if there are more components than images
-        add_image_run(subheader_paragraph, image_path, component, Inches(0.15))
+        # Create a folder to store the generated documents
+        folder_name = "generated_itineraries"
+        os.makedirs(folder_name, exist_ok=True)
 
-    paragraph3 = document.add_paragraph()
-    run3 = paragraph3.add_run("Main Focus ")
-    run3.bold = True
-    run3 = paragraph3.add_run(input_dict['genre'])
+        # Modify the file path where the documents are saved
+        file_path = os.path.join(folder_name, f'day_{day_number}_itinerary.docx')
+        tpl.save(file_path)
 
-    paragraph4 = document.add_paragraph()
-    run4 = paragraph4.add_run("Commences on: ")
-    run4.bold = True
-    run4 = paragraph4.add_run(str(input_dict['start_date']))
+    # Create a Document object
+    destDoc = Document()
+    # Load the destination document
+    destDoc.LoadFromFile("mergeDocs/front_page.docx")
 
-    paragraph6 = document.add_paragraph()
-    run6 = paragraph6.add_run("Budget : ")
-    run6.bold = True
-    run6 = paragraph6.add_run(str(input_dict['price_per_person']))
+    # Define the folder path containing the files to merge
+    folder_path = "generated_itineraries"
 
-    # Add countries and cities covered
-    paragraph5 = document.add_paragraph()
-    run5 = paragraph5.add_run("Countries and Cities Covered:")
-    run5.bold = True
+    # Create the directory if it doesn't exist
+    os.makedirs(folder_path, exist_ok=True)
 
-    # Join the city names with a comma
-    city_names = ", ".join(input_dict['cities'])
+    # List all files in the folder
+    files_to_merge = os.listdir(folder_path)
 
-    # Add all city names in a single paragraph
-    document.add_paragraph(f"- {city_names}")
+    # Filter only the .docx files
+    files_to_merge = [file for file in files_to_merge if file.endswith('.docx')]
 
-    line_paragraph = document.add_paragraph()
-    line_run = line_paragraph.add_run(
-        "_")
+    # Loop through the list
+    for file in files_to_merge:
+        # Construct the full file path
+        file_path = os.path.join(folder_path, file)
 
-    # Set the font size of the line
-    line_font = line_run.font
-    line_font.size = Pt(12)
+        # Load the source document
+        sourceDoc = Document()
+        sourceDoc.LoadFromFile(file_path)
 
-    # Set the paragraph alignment to center
-    line_paragraph.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+        # Keep the formatting of the source document when it is merged
+        # sourceDoc.KeepSameFormat = True
 
-    # Function to check if a specific word is present in the itinerary
-    paragraph = document.add_paragraph("")
+        # Import the content from the document into the destination document
+        destDoc.ImportContent(sourceDoc)
 
-    paragraph.bold = True
+    # Save the result document
+    destDoc.SaveToFile("Itinerary.docx", FileFormat.Docx2016)
+    destDoc.Close()
+    sourceDoc.Close()
 
-    def contains_word(itinerary, word):
-        return word.lower() in itinerary.lower()
-
-    # Function to add image without text
-    def add_image_without_text(paragraph, image_path, image_width):
-        run = paragraph.add_run()
-        run.add_picture(image_path, width=image_width)
-
-    # Check if the word "hotel" is present in the itinerary
-    if contains_word(itinerary, "hotel"):
-        add_image_without_text(paragraph, "icons/hotel.png", Inches(1))
-    if contains_word(itinerary, "flight"):
-        add_image_without_text(paragraph, "icons/flight.jpeg", Inches(1))
-    if contains_word(itinerary, "eat"):
-        add_image_without_text(paragraph, "icons/meal.png", Inches(1))
-    if contains_word(itinerary, "attraction"):
-        add_image_without_text(paragraph, "icons/sightseeing.png", Inches(1))
-    if contains_word(itinerary, "train"):
-        add_image_without_text(paragraph, "icons/train.jpeg", Inches(1))
-    if contains_word(itinerary, "religious"):
-        add_image_without_text(paragraph, "icons/religious.png", Inches(1))
-    if contains_word(itinerary, "work"):
-        add_image_without_text(paragraph, "icons/work.png", Inches(1))
-
-    paragraph.add_run().add_break()  # Add a blank line
-
-    paragraph.add_run().add_break()  # Add a blank line
-
-    paragraph5 = document.add_paragraph()
-    a = paragraph5.add_run("Tour Itinerary :")
-    a.bold = True
-    for line in itinerary.split('\n')[2:]:
-        paragraph = document.add_paragraph()
-        image_added = False  # Flag variable to track whether an image has been added to the line
-        for char in line:
-            # if "Dinner" in line and "Day" not in line and not image_added:
-            #     add_image_without_text(paragraph, "icons/meal.png", Inches(0.4))
-            #     image_added = True
-            # elif "Lunch" in line and "Day" not in line and not image_added:
-            #     add_image_without_text(paragraph, "icons/meal.png", Inches(0.4))
-            #     image_added = True
-            # elif "Breakfast" in line and "Day" not in line and not image_added:
-            #     add_image_without_text(paragraph, "icons/breakfast.jpeg", Inches(0.4))
-            #     image_added = True
-            if "Travel Distance" in line and "Day" not in line and not image_added:
-                add_image_without_text(paragraph, "icons/travel_distance.jpeg", Inches(0.4))
-                image_added = True
-            elif "Travel Time" in line and "Day" not in line and not image_added:
-                add_image_without_text(paragraph, "icons/travel_time.jpeg", Inches(0.4))
-                image_added = True
-            # elif "Fly" in line and "Day" not in line and not image_added:
-            #     add_image_without_text(paragraph, "icons/flight.jpeg", Inches(0.4))
-            #     image_added = True
-
-        for char in line:
-            if "Day" in line:
-                run = paragraph.add_run(char)
-                run.bold = True
-                run.font.size = Pt(14)
-                run.font.name = 'Aptos'
-
-
-            else:
-                run.font.name = 'Avenir Next LT Pro'
-                run.font.size = Pt(12)
-                run = paragraph.add_run(char)
-
-        # Add image after each day's description
-        if line.startswith("Day"):
-            day_number = line.split()[1].rstrip(":")  # Extract day number and remove the colon
-            image_path = f"images/day{day_number}.jpg"  # Form the image path
-            if os.path.exists(image_path):
-                paragraph.add_run("\n")
-                add_image_without_text(paragraph, image_path, Inches(2))  # Adjust width as needed
-
-    # Add a table
-    table_data = [
-        ["Destination", " Hotel"],
-    ]
-    for city in input_dict['cities']:
-        table_data.append([city, ''])
-
-    table = document.add_table(rows=len(table_data), cols=2)
-
-    # adding data to table
-    for i, row_data in enumerate(table_data):
-        for j, cell_data in enumerate(row_data):
-            table.cell(i, j).text = cell_data
-
-    # Apply alignment to the table
-    for row in table.rows:
-        for cell in row.cells:
-            for paragraph in cell.paragraphs:
-                paragraph.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
-
-    # Define a custom table style (optional)
-    table.style = 'Table Grid'
-
-    doc_io = BytesIO()
-    document.save(doc_io)
-    doc_io.seek(0)
-    return doc_io
+    with open("Itinerary.docx", "rb") as file:
+        bytes_content = file.read()
+    return bytes_content
 
 
 @st.cache_data(show_spinner=False)
@@ -781,7 +866,31 @@ def create_zip_file():
 
     return zip_data
 
+def get_day_itinerary(itinerary, day_number):
+    # Split the itinerary into days
+    days = itinerary.split("Day ")
+    for day in days[1:]:
+        print(day)
+        if day.startswith(str(day_number) + ":"):
+            day = day.replace('*', '')
+            day = day.replace('###', '')
+            return "Day " + day
 
+def generate_day_itineraries(itinerary):
+    day_itineraries = {}
+    # Get the maximum day number mentioned in the itinerary
+    max_day = max([int(day.split(":")[0]) for day in itinerary.split("Day ")[1:]])
+    # Generate day itineraries for each day
+    for day_number in range(1, max_day + 1):
+        day_itinerary = get_day_itinerary(itinerary, day_number)
+        if day_itinerary:
+            print(day_itinerary)
+            day_itineraries[day_number] = day_itinerary
+    return day_itineraries
+
+
+
+################## Main Code #################
 if st.session_state.get('input_dict', False):
     for key in input_dict.keys():
         if input_dict[key] != st.session_state['input_dict'][key]:
@@ -842,15 +951,6 @@ if st.session_state.get("cached_data_generated", False) and not st.session_state
         file_name=f"{input_dict['dest']} Itinerary.docx",
         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     )
-
-    zip_data = create_zip_file()
-    # Download the zip file
-    st.download_button(
-                label="Download Zip",
-                data=zip_data,
-                file_name="images.zip",
-                mime="application/zip"
-                )
 
 
 # Change icons
