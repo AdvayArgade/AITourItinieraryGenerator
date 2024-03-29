@@ -746,8 +746,28 @@ def text_to_doc(itinerary, input_dict):
     # # Define a custom table style (optional)
     # table.style = 'Table Grid'
     day_itineraries = generate_day_itineraries(itinerary)
-    day_itineraries = {day_number: '\n'.join(day_itinerary.split('\n')[1:]) for day_number, day_itinerary in
-                       day_itineraries.items()}
+    city_names = ", ".join(input_dict['cities'])
+    folder_name = "generated_itineraries"
+
+    # Delete the previously generated documents
+    for filename in os.listdir(folder_name):
+        file_path = os.path.join(folder_name, filename)
+        try:
+            if os.path.isfile(file_path):
+                os.remove(file_path)
+        except Exception as e:
+            print(f"Error deleting {file_path}: {e}")
+
+    first_page = DocxTemplate('mergeDocs/front_page.docx')
+    context = {
+        'tour_heading': itinerary.split('\n')[0],
+        'num_days': input_dict['num_days'],
+        'budget': input_dict['price_per_person'],
+        'cities': city_names,
+    }
+    first_page.render(context)
+    file_path = os.path.join(folder_name, 'cover_page.docx')
+    first_page.save(file_path)
 
     # Load the template document
     tpl = DocxTemplate("mergeDocs/daywise_itinerary.docx")
@@ -755,37 +775,40 @@ def text_to_doc(itinerary, input_dict):
     for day_number, day_itinerary in day_itineraries.items():
         # Extract the first line of the itinerary
         first_line = day_itinerary.split('\n')[0]
-        second_line = day_itinerary.split('\n')[1]
         print("Inside the text_to_doc func: ", day_itinerary, 'First line: ', first_line, 'Second line: ', day_itinerary)
         # Join city names into a comma-separated string
-        city_names = ", ".join(input_dict['cities'])
+        first_newline_index = day_itinerary.find('\n')
+
+        # Check if '\n' exists in the string
+        if first_newline_index != -1:
+            # Extract the substring starting from the index after the first '\n'
+            day_itinerary = day_itinerary[first_newline_index + 1:]
 
         # Define the context dictionary
         context = {
             'tour_heading': first_line,
             'num_days': input_dict['num_days'],
             'budget': input_dict['price_per_person'],
-            'cities': city_names,
             'day_itinerary': day_itinerary,
-            'day_title': second_line
+            'day_title': first_line
         }
 
         # Replace placeholders in the document
         tpl.render(context)
 
         # Replace the placeholder for day in the itinerary and change day_title
-        for paragraph in tpl.paragraphs:
-            if '{{day_title}}' in paragraph.text:
-                paragraph.text = paragraph.text.replace('{{day_title}}', f'Day {day_number}')
-            if '{{num_days}}' in paragraph.text:
-                paragraph.text = paragraph.text.replace('{{num_days}}', str(input_dict['num_days']))
-            if '{{cities}}' in paragraph.text:
-                paragraph.text = paragraph.text.replace('{{cities}}', city_names)
-            if '{{budget}}' in paragraph.text:
-                paragraph.text = paragraph.text.replace('{{budget}}', input_dict['price_per_person'])
+        # for paragraph in tpl.paragraphs:
+        #     if '{{day_title}}' in paragraph.text:
+        #         paragraph.text = paragraph.text.replace('{{day_title}}', f'Day {day_number}')
+        #     if '{{num_days}}' in paragraph.text:
+        #         paragraph.text = paragraph.text.replace('{{num_days}}', str(input_dict['num_days']))
+        #     if '{{cities}}' in paragraph.text:
+        #         paragraph.text = paragraph.text.replace('{{cities}}', city_names)
+        #     if '{{budget}}' in paragraph.text:
+        #         paragraph.text = paragraph.text.replace('{{budget}}', input_dict['price_per_person'])
 
         # Create a folder to store the generated documents
-        folder_name = "generated_itineraries"
+
         os.makedirs(folder_name, exist_ok=True)
 
         # Modify the file path where the documents are saved
@@ -794,8 +817,8 @@ def text_to_doc(itinerary, input_dict):
 
     # Create a Document object
     destDoc = Document()
-    # Load the destination document
-    destDoc.LoadFromFile("mergeDocs/front_page.docx")
+    # # Load the destination document
+    # destDoc.LoadFromFile("mergeDocs/front_page.docx")
 
     # Define the folder path containing the files to merge
     folder_path = "generated_itineraries"
@@ -870,7 +893,6 @@ def get_day_itinerary(itinerary, day_number):
     # Split the itinerary into days
     days = itinerary.split("Day ")
     for day in days[1:]:
-        print(day)
         if day.startswith(str(day_number) + ":"):
             day = day.replace('*', '')
             day = day.replace('###', '')
@@ -884,7 +906,7 @@ def generate_day_itineraries(itinerary):
     for day_number in range(1, max_day + 1):
         day_itinerary = get_day_itinerary(itinerary, day_number)
         if day_itinerary:
-            print(day_itinerary)
+            print('Inside generate_day_itinerary: \n', day_itinerary)
             day_itineraries[day_number] = day_itinerary
     return day_itineraries
 
