@@ -31,7 +31,8 @@ from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 from docx.oxml.ns import nsdecls
 from docx.oxml import parse_xml
 import random
-from docxtpl import DocxTemplate
+from docxtpl import DocxTemplate,InlineImage
+from docx.shared import Mm
 from spire.doc import *
 from spire.doc.common import *
 
@@ -499,78 +500,154 @@ def fetch_image(day_number, location_name, width=6000, height=4000):
     else:
         print(f"No image found for {location_name}")
 
+# def create_and_save_table_document(input_dict):
+#     # Create a new Document
+#     document = Document()
+
+#     # Add a table
+#     table_data = [["Destination", "Hotel"]]
+#     for city in input_dict['cities']:
+#         table_data.append([city, ''])
+
+#     table = document.add_table(rows=len(table_data), cols=2)
+
+#     # adding data to table
+#     for i, row_data in enumerate(table_data):
+#         for j, cell_data in enumerate(row_data):
+#             table.cell(i, j).text = cell_data
+
+#     # Apply alignment to the table
+#     for row in table.rows:
+#         for cell in row.cells:
+#             for paragraph in cell.paragraphs:
+#                 paragraph.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+
+#     # Define a custom table style (optional)
+#     table.style = 'Table Grid'
+
+#     # Create the folder if it doesn't exist
+#     if not os.path.exists("generated_itineraries"):
+#         os.makedirs("generated_itineraries")
+
+#     # Save the document
+#     file_path = os.path.join("generated_itineraries", "z_table.docx")
+#     document.save(file_path)
+
 def text_to_doc(itinerary, input_dict):
     day_itineraries = generate_day_itineraries(itinerary)
-    day_itineraries = {day_number: '\n'.join(day_itinerary.split('\n')[1:]) for day_number, day_itinerary in
-                       day_itineraries.items()}
-    tour_heading = itinerary.split('\n')[0]
+    city_names = ", ".join(input_dict['cities'])
+    folder_name = "generated_itineraries"
 
-    # Load the front page template document
-    front_page_tpl = DocxTemplate("mergeDocs/front_page.docx")
+    # Create the directory if it doesn't exist
+    if not os.path.exists(folder_name):
+        os.makedirs(folder_name)
 
-    # Extract the first line (tour heading) from the first day's itinerary
-    first_day_itinerary = day_itineraries[1]  # Assuming the first itinerary is for Day 1
-    first_line = first_day_itinerary.split('\n')[0]
+    def create_and_save_table_document(input_dict):
+        # Create a new Document
+        document = Document()
 
-    # Define context for front page
-    front_page_context = {
-        'tour_heading': tour_heading,
+        # Add a table
+        table_data = [["Destination", "Hotel"]]
+        for city in input_dict['cities']:
+            table_data.append([city, ''])
+
+        table = document.add_table(rows=len(table_data), cols=2)
+
+        # adding data to table
+        for i, row_data in enumerate(table_data):
+            for j, cell_data in enumerate(row_data):
+                table.cell(i, j).text = cell_data
+
+        # Apply alignment to the table
+        for row in table.rows:
+            for cell in row.cells:
+                for paragraph in cell.paragraphs:
+                    paragraph.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
+
+        # Define a custom table style (optional)
+        table.style = 'Table Grid'
+
+        # Create the folder if it doesn't exist
+        if not os.path.exists("generated_itineraries"):
+            os.makedirs("generated_itineraries")
+
+        # Save the document
+        file_path = os.path.join("generated_itineraries", "z_table.docx")
+        document.save(file_path)
+
+    # Delete the previously generated documents
+    for filename in os.listdir(folder_name):
+        file_path = os.path.join(folder_name, filename)
+        try:
+            if os.path.isfile(file_path):
+                os.remove(file_path)
+        except Exception as e:
+            print(f"Error deleting {file_path}: {e}")
+
+    first_page = DocxTemplate('mergeDocs/front_page.docx')
+    context = {
+        'tour_heading': itinerary.split('\n')[0],
         'num_days': input_dict['num_days'],
         'budget': input_dict['price_per_person'],
-        'cities': ", ".join(input_dict['cities'])
+        'cities': city_names,
     }
+    first_page.render(context)
+    first_page.replace_media('mergeDocs/front_img.png','mergeDocs/kashmir.png')
 
-    # Render placeholders in the front page template
-    front_page_tpl.render(front_page_context)
-    front_page_tpl.replace_media('mergeDocs/front_img.png','word_doc_code/kashmir.png')
+    file_path = os.path.join(folder_name, 'cover_page.docx')
+    first_page.save(file_path)
 
-    # Save the rendered front page template
-    front_page_tpl.save("front_page_rendered.docx")
-
-    # Load the day itinerary template document
-    day_itinerary_tpl = DocxTemplate("mergeDocs/daywise_itinerary.docx")
+    # Load the template document
+    tpl = DocxTemplate("mergeDocs/day_page.docx")
 
     for day_number, day_itinerary in day_itineraries.items():
-        # Extract the first line and second line of the itinerary
-        lines = day_itinerary.split('\n')
-        # first_line = lines[0]
-        second_line = lines[0] if len(lines) > 1 else ""  # Check if second line exists
+        # Extract the first line of the itinerary
+        first_line = day_itinerary.split('\n')[0]
+        print("Inside the text_to_doc func: ", day_itinerary, 'First line: ', first_line, 'Second line: ', day_itinerary)
+        # Join city names into a comma-separated string
+        first_newline_index = day_itinerary.find('\n')
 
-        # Define the context dictionary for day itinerary
-        day_context = {
+        # Check if '\n' exists in the string
+        if first_newline_index != -1:
+            # Extract the substring starting from the index after the first '\n'
+            day_itinerary = day_itinerary[first_newline_index + 1:]
+
+        # Extract the image file path based on the day_number
+        image_folder = "images1"
+        image_file = f"day{day_number}.png"
+        image_path = os.path.join(image_folder, image_file)
+
+        # Define the context dictionary
+        context = {
+            'tour_heading': first_line,
+            'num_days': input_dict['num_days'],
+            'budget': input_dict['price_per_person'],
             'day_itinerary': day_itinerary,
-            'day_title': f'Day {day_number}'
+            'day_title': first_line,
+            'day_image': InlineImage(
+        tpl, image_path, width=Mm(70), height=Mm(70))
         }
 
-        # Render placeholders in the day itinerary template
-        day_itinerary_tpl.render(day_context)
-
         # Replace placeholders in the document
-        for paragraph in day_itinerary_tpl.paragraphs:
-            if '{{day_title}}' in paragraph.text:
-                paragraph.text = paragraph.text.replace('{{day_title}}', f'Day {day_number}')
+        tpl.render(context)
 
-        # Create a folder to store the generated documents
-        folder_name = "generated_itineraries"
         os.makedirs(folder_name, exist_ok=True)
 
         # Modify the file path where the documents are saved
         file_path = os.path.join(folder_name, f'day_{day_number}_itinerary.docx')
-        day_itinerary_tpl.save(file_path)
-
-    # Merge the front page with the day itineraries
-    merge_documents("front_page_rendered.docx", "generated_itineraries", "Itinerary.docx")
-
-    # Read the merged document and return its content
-    with open("Itinerary.docx", "rb") as file:
-        bytes_content = file.read()
-    return bytes_content
+        tpl.save(file_path)
 
 
-def merge_documents(front_page_file, folder_path, output_file):
-    # Load the front page document
-    dest_doc = Document()
-    dest_doc.LoadFromFile(front_page_file)
+    # Create a Document object
+    destDoc = Document()
+    # # Load the destination document
+    # destDoc.LoadFromFile("mergeDocs/front_page.docx")
+
+    # Define the folder path containing the files to merge
+    folder_path = "generated_itineraries"
+
+    # Create the directory if it doesn't exist
+    os.makedirs(folder_path, exist_ok=True)
 
     # List all files in the folder
     files_to_merge = os.listdir(folder_path)
@@ -584,16 +661,52 @@ def merge_documents(front_page_file, folder_path, output_file):
         file_path = os.path.join(folder_path, file)
 
         # Load the source document
-        source_doc = Document()
-        source_doc.LoadFromFile(file_path)
+        sourceDoc = Document()
+        sourceDoc.LoadFromFile(file_path)
+
+        # Keep the formatting of the source document when it is merged
+        # sourceDoc.KeepSameFormat = True
 
         # Import the content from the document into the destination document
-        dest_doc.ImportContent(source_doc)
+        destDoc.ImportContent(sourceDoc)
 
     # Save the result document
-    dest_doc.SaveToFile(output_file, FileFormat.Docx2016)
-    dest_doc.Close()
-    source_doc.Close()
+    destDoc.SaveToFile("Itinerary.docx", FileFormat.Docx2016)
+    destDoc.Close()
+    sourceDoc.Close()
+
+    with open("Itinerary.docx", "rb") as file:
+        bytes_content = file.read()
+    return bytes_content
+
+
+# def merge_documents(front_page_file, folder_path, output_file):
+#     # Load the front page document
+#     dest_doc = Document()
+#     dest_doc.LoadFromFile(front_page_file)
+
+#     # List all files in the folder
+#     files_to_merge = os.listdir(folder_path)
+
+#     # Filter only the .docx files
+#     files_to_merge = [file for file in files_to_merge if file.endswith('.docx')]
+
+#     # Loop through the list
+#     for file in files_to_merge:
+#         # Construct the full file path
+#         file_path = os.path.join(folder_path, file)
+
+#         # Load the source document
+#         source_doc = Document()
+#         source_doc.LoadFromFile(file_path)
+
+#         # Import the content from the document into the destination document
+#         dest_doc.ImportContent(source_doc)
+
+#     # Save the result document
+#     dest_doc.SaveToFile(output_file, FileFormat.Docx2016)
+#     dest_doc.Close()
+#     source_doc.Close()
 
 def get_day_itinerary(itinerary, day_number):
     # Split the itinerary into days
