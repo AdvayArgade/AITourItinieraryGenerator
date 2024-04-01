@@ -406,7 +406,7 @@ def generate_itinerary(input_dict):
 
     # Split content into individual days
     days = content.split("\n\n")
-    titles_and_days = re.findall(r"Day (\d+): (.+?)(?=\n)", content)
+    
     print(content)
 
     # print(response)
@@ -422,19 +422,23 @@ def generate_itinerary(input_dict):
             fetch_image(day_number, location_name)
         else:
             print(f"Invalid line format: {line}. Skipping.")
-
-    print(titles_and_days)  # Debugging: print titles_and_days to see its structure
+    
+    
+    banner=(input_dict['dest'])
+    print("this is banner",banner)
+    fetch_and_save_banner_image(banner)
+    # delete_image_files("images")
+    # print(titles_and_days)  # Debugging: print titles_and_days to see its structure
 
     st.session_state['input_dict'] = input_dict
     # with open('input_dict.pickle', 'wb') as handle:
     #     pickle.dump(input_dict, handle, protocol=pickle.HIGHEST_PROTOCOL)
     return response, all_city_dict, flight_info, days, city_string
 
-
 def extract_attractive_locations(response):
     
 # Define the GPT-3.5 prompt
-    prompt = f"Extract attractive only locations from the following itinerary for all days right from day 1 to the last day"\
+    prompt = f"Extract any and only one attractive location from the following itinerary for all days right from day 1 to the last day"\
              f"not the complete line and organize them day wise such that they will be fetched individually from a particular day"\
              f"but printed in format like day number: location name one at a time"\
              f"if there are more than one location for a day then repeat the day number"\
@@ -443,6 +447,8 @@ def extract_attractive_locations(response):
              f"if there is no location for a particular day then simply generate any relevant location to it or about its cuisine which is not there in the data"\
              f"No location will be same, if a particular day has a location mentioned then that location will not be present in any other day"\
              f"if there are no locations for a particular day provide any travel related word that will generate an attractive image and will suit for any travel destination"\
+             f"there has to be one image for everyday compulsory"\
+    
     # Generate the travel itinerary using the modified user message
     chat_completion = client.chat.completions.create(
         model="gpt-3.5-turbo",
@@ -482,7 +488,7 @@ def fetch_image(day_number, location_name, width=6000, height=4000):
         image_data = requests.get(image_url).content
         
         # Open image using Pillow
-        image = PIL.Image.open(BytesIO(image_data))
+        image = Image.open(BytesIO(image_data))
         
         # Resize image to desired dimensions
         image = image.resize((width, height))
@@ -493,12 +499,70 @@ def fetch_image(day_number, location_name, width=6000, height=4000):
             os.makedirs(directory)
         
         # Saving image with filename in format 'day_number_location.jpg' inside 'images' directory
-        filename = f'{directory}/{day_number}_{location_name.replace(" ", "_")}.jpg'
-        image.save(filename, 'JPEG')
+        filename = f'{directory}/{day_number}.png'
+        image.save(filename, 'PNG')
         
         print(f"Image for {location_name} saved as {filename}")
     else:
         print(f"No image found for {location_name}")
+
+def fetch_and_save_banner_image(banner, width=6000, height=4000):
+    # Pexels API key (replace 'YOUR_API_KEY' with your actual Pexels API key)
+    api_key = 'HtfomN1StvNLr9SgjXbdC8qE8nuIHzbMXfwmWcHwRe24eNziS6kr5ifC'
+    headers = {'Authorization': api_key}
+    
+    # Search query for location name
+    query = banner
+    
+    # Pexels API endpoint for photo search
+    url = f'https://api.pexels.com/v1/search?query={query}&per_page=1'
+    
+    # Making GET request to Pexels API
+    response = requests.get(url, headers=headers)
+    data = response.json()
+    
+    # Check if response contains results
+    if 'photos' in data and len(data['photos']) > 0:
+        image_url = data['photos'][0]['src']['large']
+        
+        # Downloading image
+        image_data = requests.get(image_url).content
+        
+        # Open image using Pillow
+        image = Image.open(BytesIO(image_data))
+        
+
+        image = image.resize((width, height))
+        # Create directory if it doesn't exist
+        directory = 'images'
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+        
+        # Saving image with filename in format 'day_number_location.jpg' inside 'images' directory
+        filename = f'{directory}/banner.png'
+        image.save(filename, 'PNG')
+        
+        print(f"Image for {banner} saved as {filename}")
+    else:
+        print(f"No image found for {banner}")
+        
+        
+def delete_image_files(directory):
+    # Get a list of all files in the directory
+    files = os.listdir(directory)
+
+    # Loop through each file
+    for file in files:
+        # Check if the file is an image file (you can customize this condition as needed)
+        if file.endswith(".jpg") or file.endswith(".jpeg") or file.endswith(".png") or file.endswith(".gif"):
+            # Construct the full path to the file
+            file_path = os.path.join(directory, file)
+            try:
+                # Attempt to remove the file
+                os.remove(file_path)
+                print(f"Deleted: {file_path}")
+            except Exception as e:
+                print(f"Error deleting {file_path}: {e}")
 
 # def create_and_save_table_document(input_dict):
 #     # Create a new Document
@@ -838,8 +902,11 @@ if st.session_state.get("cached_data_generated", False) and not st.session_state
         data=doc_io,
         file_name=f"{input_dict['dest']} Itinerary.docx",
         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        
     )
-
+   
+   
+   
     # doc = create_word_doc(city_dict, flight_info, input_dict) # flight & hotel info document
     
     # Save the Word document to a file
