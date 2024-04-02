@@ -1,38 +1,21 @@
-import pickle
+import json
+import logging
+import math
 import re
 from datetime import timedelta
-import json
-import math
+from io import BytesIO
 import requests
 import streamlit as st
-from PIL import Image
 import PIL.Image
+from amadeus import Client, ResponseError
+from docx import Document
+from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
+from docx.shared import Mm
+from docxtpl import DocxTemplate, InlineImage
+from dotenv import set_key, load_dotenv, dotenv_values
 from geopy.exc import GeocoderTimedOut
 from geopy.geocoders import Nominatim
 from openai import OpenAI
-import logging
-import os
-from docx import Document
-from docx.shared import Pt
-from docx.shared import Inches
-from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
-from io import BytesIO
-import nltk  
-from nltk import pos_tag, ne_chunk
-from nltk.tokenize import word_tokenize
-from amadeus import Client, ResponseError, Location
-import zipfile
-from dotenv import set_key, load_dotenv, dotenv_values
-from docx.oxml import OxmlElement
-from docx.oxml.shared import qn
-from docx.shared import Pt, RGBColor, Inches
-from docx.enum.table import WD_TABLE_ALIGNMENT, WD_ALIGN_VERTICAL
-from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
-from docx.oxml.ns import nsdecls
-from docx.oxml import parse_xml
-import random
-from docxtpl import DocxTemplate,InlineImage
-from docx.shared import Mm
 from spire.doc import *
 from spire.doc.common import *
 
@@ -99,9 +82,7 @@ input_dict['average_age'] = col2.number_input("Average age", key='average_age', 
 input_dict['food'] = 'non veg' if st.toggle('Include non-veg hotels') else 'veg'
 special_note = st.text_area("Special Note(Optional)", key='special_note')
 
-
 input_dict['num_tourists'] = input_dict['num_adults'] + input_dict['num_children']
-
 
 client = OpenAI(api_key=API_KEY)
 
@@ -133,7 +114,7 @@ function_descriptions = [
                     "description": "The ordered list of dates for arrival in the cities in YYYY-MM-DD format."
                 },
 
-                "iata_list":{
+                "iata_list": {
                     "type": "array",
                     "items": {
                         "type": "string"
@@ -191,6 +172,7 @@ def get_hotel_data(city, checkin_date, checkout_date, num_adults, num_children):
 
         print('Max retries exceeded. Unable to geocode the location.')
         return None
+
     location = geocode_with_retry(city)
     print('Location', location)
 
@@ -273,7 +255,7 @@ def flight_search(input_dict):
                 originLocationCode=src_iata,
                 destinationLocationCode=dest_iata,
                 departureDate=dates[i],
-                adults=min(num_adults,9),
+                adults=min(num_adults, 9),
                 travelClass='ECONOMY',
                 currencyCode='INR',
                 max=20
@@ -363,7 +345,6 @@ def generate_itinerary(input_dict):
             get_hotel_data(cities[i], dates[i], dates[i + 1], input_dict['num_adults'], input_dict['num_children']))
     input_dict['hotels_by_city'] = all_city_dict
 
-    
     # Part 2: Actually generate the itinerary
     user_message = f"Design a detailed itinerary for a trip from {input_dict['src']} to {input_dict['dest']} starting from {input_dict['start_date']} and for " \
                    f"{input_dict['num_days']} days. The ordered list of cities is {cities} and of dates is {dates}. The budget for this trip is {input_dict['price_per_person']} INR per person. This trip is designed " \
@@ -381,9 +362,7 @@ def generate_itinerary(input_dict):
                    f"in the first city if the travel time and distance is more otherwise we can suggest activities." \
                    f"Finally the description for each day which should look like if a human is speaking(this paragraph will be under the heading for each day)" \
  \
-
-
-    # Generate the travel itinerary using the modified user message
+        # Generate the travel itinerary using the modified user message
     chat_completion = client.chat.completions.create(
         messages=[
             {
@@ -406,15 +385,16 @@ def generate_itinerary(input_dict):
 
     # Split content into individual days
     days = content.split("\n\n")
-    
+
     print(content)
 
     # print(response)
-    locations= extract_attractive_locations(response)
+    locations = extract_attractive_locations(response)
     print(locations)
+    delete_image_files('images')
     # response = "Dummy response"
     for line in locations.split('\n'):
-    # Splitting line into day number and location name
+        # Splitting line into day number and location name
         split_line = line.split(': ', 1)
         if len(split_line) == 2:
             day_number, location_name = split_line
@@ -422,10 +402,9 @@ def generate_itinerary(input_dict):
             fetch_image(day_number, location_name)
         else:
             print(f"Invalid line format: {line}. Skipping.")
-    
-    
-    banner=(input_dict['dest'])
-    print("this is banner",banner)
+
+    banner = (input_dict['dest'])
+    print("this is banner", banner)
     fetch_and_save_banner_image(banner)
     # delete_image_files("images")
     # print(titles_and_days)  # Debugging: print titles_and_days to see its structure
@@ -435,21 +414,21 @@ def generate_itinerary(input_dict):
     #     pickle.dump(input_dict, handle, protocol=pickle.HIGHEST_PROTOCOL)
     return response, all_city_dict, flight_info, days, city_string
 
+
 def extract_attractive_locations(response):
-    
-# Define the GPT-3.5 prompt
-    prompt = f"Extract any and only one attractive location from the following itinerary for all days right from day 1 to the last day"\
-             f"not the complete line and organize them day wise such that they will be fetched individually from a particular day"\
-             f"but printed in format like day number: location name one at a time"\
-             f"if there are more than one location for a day then repeat the day number"\
-             f"every location must be initialized with day number and write location name and every location should be there on a new line"\
-             f"here it is not needed to have city names only the attractive locations are enough\n\n{response}\n\n "\
-             f"if there is no location for a particular day then simply generate any relevant location to it or about its cuisine which is not there in the data"\
-             f"No location will be same, if a particular day has a location mentioned then that location will not be present in any other day"\
-             f"if there are no locations for a particular day provide any travel related word that will generate an attractive image and will suit for any travel destination"\
-             f"there has to be one image for everyday compulsory"\
-    
-    # Generate the travel itinerary using the modified user message
+    # Define the GPT-3.5 prompt
+    prompt = f"Extract any and only one attractive location from the following itinerary for all days right from day 1 to the last day" \
+             f"not the complete line and organize them day wise such that they will be fetched individually from a particular day" \
+             f"but printed in format like day number: location name one at a time" \
+             f"if there are more than one location for a day then repeat the day number" \
+             f"every location must be initialized with day number and write location name and every location should be there on a new line" \
+             f"here it is not needed to have city names only the attractive locations are enough\n\n{response}\n\n " \
+             f"if there is no location for a particular day then simply generate any relevant location to it or about its cuisine which is not there in the data" \
+             f"No location will be same, if a particular day has a location mentioned then that location will not be present in any other day" \
+             f"if there are no locations for a particular day provide any travel related word that will generate an attractive image and will suit for any travel destination" \
+             f"there has to be one image for everyday compulsory" \
+ \
+        # Generate the travel itinerary using the modified user message
     chat_completion = client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=[
@@ -465,88 +444,89 @@ def extract_attractive_locations(response):
 
     return completion_text
 
-def fetch_image(day_number, location_name, width=6000, height=4000):
+
+def fetch_image(day_number, location_name, width=600, height=400):
     # Pexels API key (replace 'YOUR_API_KEY' with your actual Pexels API key)
     api_key = 'HtfomN1StvNLr9SgjXbdC8qE8nuIHzbMXfwmWcHwRe24eNziS6kr5ifC'
     headers = {'Authorization': api_key}
-    
+
     # Search query for location name
     query = location_name
-    
+
     # Pexels API endpoint for photo search
     url = f'https://api.pexels.com/v1/search?query={query}&per_page=1'
-    
+
     # Making GET request to Pexels API
     response = requests.get(url, headers=headers)
     data = response.json()
-    
+
     # Check if response contains results
     if 'photos' in data and len(data['photos']) > 0:
         image_url = data['photos'][0]['src']['large']
-        
+
         # Downloading image
         image_data = requests.get(image_url).content
-        
+
         # Open image using Pillow
-        image = Image.open(BytesIO(image_data))
-        
+        image = PIL.Image.open(BytesIO(image_data))
+
         # Resize image to desired dimensions
         image = image.resize((width, height))
-        
+
         # Create directory if it doesn't exist
         directory = 'images'
         if not os.path.exists(directory):
             os.makedirs(directory)
-        
+
         # Saving image with filename in format 'day_number_location.jpg' inside 'images' directory
         filename = f'{directory}/{day_number}.png'
         image.save(filename, 'PNG')
-        
+
         print(f"Image for {location_name} saved as {filename}")
     else:
         print(f"No image found for {location_name}")
 
-def fetch_and_save_banner_image(banner, width=6000, height=4000):
+
+def fetch_and_save_banner_image(banner, width=600, height=400):
     # Pexels API key (replace 'YOUR_API_KEY' with your actual Pexels API key)
     api_key = 'HtfomN1StvNLr9SgjXbdC8qE8nuIHzbMXfwmWcHwRe24eNziS6kr5ifC'
     headers = {'Authorization': api_key}
-    
+
     # Search query for location name
     query = banner
-    
+
     # Pexels API endpoint for photo search
     url = f'https://api.pexels.com/v1/search?query={query}&per_page=1'
-    
+
     # Making GET request to Pexels API
     response = requests.get(url, headers=headers)
     data = response.json()
-    
+
     # Check if response contains results
     if 'photos' in data and len(data['photos']) > 0:
         image_url = data['photos'][0]['src']['large']
-        
+
         # Downloading image
         image_data = requests.get(image_url).content
-        
+
         # Open image using Pillow
-        image = Image.open(BytesIO(image_data))
-        
+        image = PIL.Image.open(BytesIO(image_data))
 
         image = image.resize((width, height))
         # Create directory if it doesn't exist
         directory = 'images'
         if not os.path.exists(directory):
             os.makedirs(directory)
-        
+
         # Saving image with filename in format 'day_number_location.jpg' inside 'images' directory
         filename = f'{directory}/banner.png'
         image.save(filename, 'PNG')
-        
+
         print(f"Image for {banner} saved as {filename}")
     else:
         print(f"No image found for {banner}")
-        
-        
+
+
 def delete_image_files(directory):
     # Get a list of all files in the directory
     files = os.listdir(directory)
@@ -564,44 +544,14 @@ def delete_image_files(directory):
             except Exception as e:
                 print(f"Error deleting {file_path}: {e}")
 
-# def create_and_save_table_document(input_dict):
-#     # Create a new Document
-#     document = Document()
 
-#     # Add a table
-#     table_data = [["Destination", "Hotel"]]
-#     for city in input_dict['cities']:
-#         table_data.append([city, ''])
 
-#     table = document.add_table(rows=len(table_data), cols=2)
-
-#     # adding data to table
-#     for i, row_data in enumerate(table_data):
-#         for j, cell_data in enumerate(row_data):
-#             table.cell(i, j).text = cell_data
-
-#     # Apply alignment to the table
-#     for row in table.rows:
-#         for cell in row.cells:
-#             for paragraph in cell.paragraphs:
-#                 paragraph.alignment = WD_PARAGRAPH_ALIGNMENT.CENTER
-
-#     # Define a custom table style (optional)
-#     table.style = 'Table Grid'
-
-#     # Create the folder if it doesn't exist
-#     if not os.path.exists("generated_itineraries"):
-#         os.makedirs("generated_itineraries")
-
-#     # Save the document
-#     file_path = os.path.join("generated_itineraries", "z_table.docx")
-#     document.save(file_path)
 
 def text_to_doc(itinerary, input_dict):
     day_itineraries = generate_day_itineraries(itinerary)
     city_names = ", ".join(input_dict['cities'])
     folder_name = "generated_itineraries"
-
+    fetch_and_save_banner_image(itinerary.split('\n')[0])
     # Create the directory if it doesn't exist
     if not os.path.exists(folder_name):
         os.makedirs(folder_name)
@@ -649,14 +599,17 @@ def text_to_doc(itinerary, input_dict):
             print(f"Error deleting {file_path}: {e}")
 
     first_page = DocxTemplate('mergeDocs/front_page.docx')
+    image_path = 'images/banner.png'
     context = {
         'tour_heading': itinerary.split('\n')[0],
         'num_days': input_dict['num_days'],
         'budget': input_dict['price_per_person'],
         'cities': city_names,
+        # 'day_image': InlineImage(
+        #     first_page, image_path, width=Mm(70), height=Mm(70))
     }
     first_page.render(context)
-    first_page.replace_media('mergeDocs/front_img.png','mergeDocs/kashmir.png')
+    # first_page.replace_media('mergeDocs/front_img.png', 'images/banner.png')
 
     file_path = os.path.join(folder_name, 'cover_page.docx')
     first_page.save(file_path)
@@ -667,7 +620,8 @@ def text_to_doc(itinerary, input_dict):
     for day_number, day_itinerary in day_itineraries.items():
         # Extract the first line of the itinerary
         first_line = day_itinerary.split('\n')[0]
-        print("Inside the text_to_doc func: ", day_itinerary, 'First line: ', first_line, 'Second line: ', day_itinerary)
+        print("Inside the text_to_doc func: ", day_itinerary, 'First line: ', first_line, 'Second line: ',
+              day_itinerary)
         # Join city names into a comma-separated string
         first_newline_index = day_itinerary.find('\n')
 
@@ -677,8 +631,8 @@ def text_to_doc(itinerary, input_dict):
             day_itinerary = day_itinerary[first_newline_index + 1:]
 
         # Extract the image file path based on the day_number
-        image_folder = "images1"
-        image_file = f"day{day_number}.png"
+        image_folder = "images"
+        image_file = f"Day {day_number}.png"
         image_path = os.path.join(image_folder, image_file)
 
         # Define the context dictionary
@@ -689,7 +643,7 @@ def text_to_doc(itinerary, input_dict):
             'day_itinerary': day_itinerary,
             'day_title': first_line,
             'day_image': InlineImage(
-        tpl, image_path, width=Mm(70), height=Mm(70))
+                tpl, image_path, width=Mm(70), height=Mm(70))
         }
 
         # Replace placeholders in the document
@@ -700,7 +654,6 @@ def text_to_doc(itinerary, input_dict):
         # Modify the file path where the documents are saved
         file_path = os.path.join(folder_name, f'day_{day_number}_itinerary.docx')
         tpl.save(file_path)
-
 
     # Create a Document object
     destDoc = Document()
@@ -782,22 +735,23 @@ def get_day_itinerary(itinerary, day_number):
             day = day.replace('###', '')
             return "Day " + day
 
+
 def generate_day_itineraries(itinerary):
     day_itineraries = {}
-    
+
     # Regular expression pattern to extract day numbers
     pattern = r"Day (\d+)"
-    
+
     # Find all matches of the pattern in the itinerary
     matches = re.findall(pattern, itinerary)
-    
+
     # Convert matched day numbers to integers and get the maximum day
     max_day = max(int(day) for day in matches)
-    
+
     # Initialize day itineraries for all days up to the maximum day
     for day_number in range(1, max_day + 1):
         day_itineraries[day_number] = ""
-    
+
     # Generate day itineraries for each day
     for day_number in range(1, max_day + 1):
         day_itinerary = get_day_itinerary(itinerary, day_number)
@@ -806,10 +760,9 @@ def generate_day_itineraries(itinerary):
     return day_itineraries
 
 
-
 # def create_word_doc(city_dict, flight_info, input_dict):
 #     doc = Document()
-    
+
 #     # Add hotels information
 #     doc.add_heading('Hotels', level=1)
 #     for city, hotels in city_dict.items():
@@ -828,7 +781,7 @@ def generate_day_itineraries(itinerary):
 #             para.add_run(f"Rating: {hotel['rating']}\n")
 #             para.alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
 #             doc.add_paragraph()  # Add an empty paragraph for spacing
-    
+
 #     # Add flight details
 #     doc.add_heading('Flight Details', level=1)
 #     for city, flights in flight_info.items():
@@ -841,7 +794,7 @@ def generate_day_itineraries(itinerary):
 #             para.add_run(f"Price: {flight['Price']} INR\n").italic = True
 #             para.alignment = WD_PARAGRAPH_ALIGNMENT.LEFT
 #             doc.add_paragraph()  # Add an empty paragraph for spacing
-    
+
 #     return doc
 
 if st.session_state.get('input_dict', False):
@@ -902,16 +855,14 @@ if st.session_state.get("cached_data_generated", False) and not st.session_state
         data=doc_io,
         file_name=f"{input_dict['dest']} Itinerary.docx",
         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        
+
     )
-   
-   
-   
+
     # doc = create_word_doc(city_dict, flight_info, input_dict) # flight & hotel info document
-    
+
     # Save the Word document to a file
     # doc.save("travel_info.docx")
-    
+
     # Provide a download button for the saved document
     # with open("travel_info.docx", "rb") as file:
     #     file_contents = file.read()
