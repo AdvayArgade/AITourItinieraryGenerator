@@ -386,7 +386,7 @@ def generate_itinerary(input_dict):
     # Split content into individual days
     days = content.split("\n\n")
 
-    print(content)
+    # print(content)
 
     # print(response)
     locations = extract_attractive_locations(response)
@@ -447,7 +447,7 @@ def extract_attractive_locations(response):
 
 def fetch_image(day_number, location_name, width=600, height=400):
     # Pexels API key (replace 'YOUR_API_KEY' with your actual Pexels API key)
-    api_key = 'HtfomN1StvNLr9SgjXbdC8qE8nuIHzbMXfwmWcHwRe24eNziS6kr5ifC'
+    api_key = PEXELS_API_KEY
     headers = {'Authorization': api_key}
 
     # Search query for location name
@@ -489,7 +489,7 @@ def fetch_image(day_number, location_name, width=600, height=400):
 
 def fetch_and_save_banner_image(banner, width=600, height=400):
     # Pexels API key (replace 'YOUR_API_KEY' with your actual Pexels API key)
-    api_key = 'HtfomN1StvNLr9SgjXbdC8qE8nuIHzbMXfwmWcHwRe24eNziS6kr5ifC'
+    api_key = PEXELS_API_KEY
     headers = {'Authorization': api_key}
 
     # Search query for location name
@@ -597,9 +597,11 @@ def text_to_doc(itinerary, input_dict):
                 os.remove(file_path)
         except Exception as e:
             print(f"Error deleting {file_path}: {e}")
+   
 
     first_page = DocxTemplate('mergeDocs/front_page.docx')
-    image_path = 'images/banner.png'
+    
+    # image_path = 'images/banner.png'
     context = {
         'tour_heading': itinerary.split('\n')[0],
         'num_days': input_dict['num_days'],
@@ -729,7 +731,7 @@ def get_day_itinerary(itinerary, day_number):
     # Split the itinerary into days
     days = itinerary.split("Day ")
     for day in days[1:]:
-        print(day)
+        # print(day)
         if day.startswith(str(day_number) + ":"):
             day = day.replace('*', '')
             day = day.replace('###', '')
